@@ -8,7 +8,141 @@ import os,sys, termios, atexit
 from select import select
 
 
-class Terminal:
+colors= { "BLACK"   : 0,
+          "BLUE"    : 1,
+          "GREEN"   : 2,
+          "CYAN"    : 3,
+          "RED"     : 4,
+          "PURPLE"  : 5,
+          "BROWN"   : 6,
+          "LGREY"   : 7,
+          "DGRAY"   : 8,
+          "LBLUE"   : 9,
+          "LGREEN"  : 10,
+          "LCYAN"   : 11,
+          "LRED"    : 12,
+          "LPURPLE" : 13,
+          "YELLOW"  : 14,
+          "WHITE"   : 15  }
+
+def get_terminal():
+    if os.name == "nt":
+        return TerminalWindows()
+    if os.name == "posix":
+        return TerminalANSIPosix()
+    else:
+        return None # Should raise exception!
+
+
+class TerminalWindows:
+    def __init__(self):
+        self.fg = None
+        self.bk = None
+        self.havecolor = 1
+        self.dotitles = 1
+        import msvcrt
+        import ctypes
+        from ctypes import windll, Structure, c_short, c_ushort, byref, c_char_p, c_uint
+        self.SHORT = c_short
+        self.WORD = c_ushort
+        
+        self.stdout_handle = windll.kernel32.GetStdHandle(STD_OUTPUT_HANDLE)
+        self.SetConsoleTextAttribute = windll.kernel32.SetConsoleTextAttribute
+        self.GetConsoleScreenBufferInfo = windll.kernel32.GetConsoleScreenBufferInfo
+        self.SetConsoleTitle = windll.kernel32.SetConsoleTitleA
+        self.GetConsoleTitle = windll.kernel32.GetConsoleTitleA
+        self.GetConsoleCP = windll.kernel32.GetConsoleCP
+        self.SetConsoleCP = windll.kernel32.SetConsoleCP
+        
+    def restore_buffered_mode(self):
+        pass
+
+
+    def enable_unbuffered_input_mode(self):
+        pass
+
+    def putch(self, ch):
+        msvcrt.putc(ch)
+
+    def getch(self):
+        return msvcrt.getc()
+
+    def getche(self):
+        return msvcrt.getche()
+
+    def kbhit(self, timeout=0):
+        return msvcrt.kbhit()
+
+    def no_colors(self):
+        self.havecolor = 0    
+
+    def set_color(self, fg = None, bk = None):
+        actual = self.__get_text_attr()
+        if fg == None:
+            fg = actual & 0x000F
+        if bk == None:
+            bk = actual & 0x00F0
+        else:
+            bk <<=4
+
+        self.__set_text_attr(fg + bk)
+        
+    def __get_text_attr(self):
+          csbi = self.CONSOLE_SCREEN_BUFFER_INFO()
+          self.GetConsoleScreenBufferInfo(self.stdout_handle, byref(csbi))
+          return csbi.wAttributes
+
+    def __set_text_attr(self):
+          self.SetConsoleTextAttribute(stdout_handle, color)
+
+    def set_title(self, title):
+        ctitle = c_char_p(title)
+        self.SetConsoleTitle(ctitle)
+
+    def cprint(self, fg, bk, text):
+        self.set_color(fg, bk)
+        print (text,end="")
+
+    def print_at(self, x, y, text):
+            self.gotoXY(x, y)
+            print(text,end="")
+
+    def clear(self):
+        pass
+
+    def gotoXY(self, x,y):
+        pass
+
+    def save_pos(self):
+        pass
+
+    def restore_pos(self):
+        pass
+
+    def reset(self):
+        pass
+
+    def move_left(self, c = 1):
+        pass
+
+    def move_right(self, c = 1):
+        pass
+
+    def move_up(self, c = 1):
+        pass
+
+    def move_down(self, c = 1):
+        pass
+
+    def columns(self):
+        pass
+        
+    def lines(self):
+        pass
+
+
+
+class TerminalANSIPosix:
     escape = "\x1b["
     codes={}
     codes["reset"]="\x1b[0m"
@@ -91,9 +225,9 @@ class Terminal:
         
     def set_color(self, fg = None, bk = None):
         if fg != None:
-            sys.stdout.write(Terminal.escape + Terminal.colors_fg[fg])
+            sys.stdout.write(TerminalANSIPosix.escape + TerminalANSIPosix.colors_fg[fg])
         if bk != None:
-            sys.stdout.write(Terminal.escape + Terminal.colors_bk[bk])
+            sys.stdout.write(TerminalANSIPosix.escape + TerminalANSIPosix.colors_bk[bk])
         
     def set_title(self, title):
         if "TERM" in os.environ:
@@ -111,31 +245,31 @@ class Terminal:
             print(text,end="")
             
     def clear(self):
-        sys.stdout.write(Terminal.codes["clear"])
+        sys.stdout.write(TerminalANSIPosix.codes["clear"])
         
     def gotoXY(self, x,y):
-        sys.stdout.write(Terminal.codes["gotoxy"] % (y, x))
+        sys.stdout.write(TerminalANSIPosix.codes["gotoxy"] % (y, x))
     
     def save_pos(self):
-        sys.stdout.write(Terminal.codes["save"])
+        sys.stdout.write(TerminalANSIPosix.codes["save"])
         
     def restore_pos(self):
-        sys.stdout.write(Terminal.codes["restore"])
+        sys.stdout.write(TerminalANSIPosix.codes["restore"])
         
     def reset(self):
-        sys.stdout.write(Terminal.codes["reset"])
+        sys.stdout.write(TerminalANSIPosix.codes["reset"])
         
     def move_left(self, c = 1):
-        sys.stdout.write(Terminal.codes["move_left"] % c)
+        sys.stdout.write(TerminalANSIPosix.codes["move_left"] % c)
         
     def move_right(self, c = 1):
-        sys.stdout.write(Terminal.codes["move_right"] % c)
+        sys.stdout.write(TerminalANSIPosix.codes["move_right"] % c)
         
     def move_up(self, c = 1):
-        sys.stdout.write(Terminal.codes["move_up"] % c)
+        sys.stdout.write(TerminalANSIPosix.codes["move_up"] % c)
         
     def move_down(self, c = 1):
-        sys.stdout.write(Terminal.codes["move_down"] % c)
+        sys.stdout.write(TerminalANSIPosix.codes["move_down"] % c)
         
     def columns(self):
         if "COLUMNS" in os.environ:
@@ -151,7 +285,7 @@ class Terminal:
 
 
 if __name__ == "__main__":
-    t = Terminal()
+    t = get_terminal()
     t.enable_unbuffered_input_mode()
     t.clear()
     t.gotoXY(0,0)
