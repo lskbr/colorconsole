@@ -1,12 +1,17 @@
+#
 # ColorConsole
 #
-# Inspired on output.py from Gentoo and 
-# http://code.activestate.com/recipes/572182-how-to-implement-kbhit-on-linux/
+# Inspired/copied/adapted from:
+# 
+# output.py from Gentoo and 
+# http://code.activestate.com/recipes/572182-how-to-implement-kbhit-on-linux/ and
+# http://www.burgaud.com/bring-colors-to-the-windows-console-with-python/
+#
 #
 
-import os,sys, termios, atexit
-from select import select
-
+# Added for Python 2.6 compatibility
+from __future__ import print_function
+import os,sys
 
 colors= { "BLACK"   : 0,
           "BLUE"    : 1,
@@ -26,37 +31,33 @@ colors= { "BLACK"   : 0,
           "WHITE"   : 15  }
 
 def get_terminal():
-    if os.name == "nt":
+    if os.name == "nt":        
         return TerminalWindows()
-    if os.name == "posix":
+    if os.name == "posix":       
         return TerminalANSIPosix()
     else:
         return None # Should raise exception!
 
 
 class TerminalWindows:
+    STD_INPUT_HANDLE = -10
+    STD_OUTPUT_HANDLE = -11
+    WAIT_TIMEOUT = 0x00000102
+    WAIT_OBJECT_0 = 0
+    
     def __init__(self):
         self.fg = None
         self.bk = None
         self.havecolor = 1
         self.dotitles = 1
-        import msvcrt
-        import ctypes
-        from ctypes import windll, Structure, c_short, c_ushort, byref, c_char_p, c_uint
-        self.SHORT = c_short
-        self.WORD = c_ushort
-        
-        self.stdout_handle = windll.kernel32.GetStdHandle(STD_OUTPUT_HANDLE)
-        self.SetConsoleTextAttribute = windll.kernel32.SetConsoleTextAttribute
-        self.GetConsoleScreenBufferInfo = windll.kernel32.GetConsoleScreenBufferInfo
-        self.SetConsoleTitle = windll.kernel32.SetConsoleTitleA
-        self.GetConsoleTitle = windll.kernel32.GetConsoleTitleA
-        self.GetConsoleCP = windll.kernel32.GetConsoleCP
-        self.SetConsoleCP = windll.kernel32.SetConsoleCP
-        
+        self.stdout_handle = windll.kernel32.GetStdHandle(TerminalWindows.STD_OUTPUT_HANDLE)
+        self.stdin_handle = windll.kernel32.GetStdHandle(TerminalWindows.STD_INPUT_HANDLE)
+        self.reset_attrib = self.__get_text_attr()
+        self.savedX = 0
+        self.savedY = 0
+       
     def restore_buffered_mode(self):
-        pass
-
+        self.__set_text_attr(self.reset_attrib)
 
     def enable_unbuffered_input_mode(self):
         pass
@@ -65,12 +66,22 @@ class TerminalWindows:
         msvcrt.putc(ch)
 
     def getch(self):
-        return msvcrt.getc()
+        return msvcrt.getch()
+        #n = DWORD(1)
+        #out = DWORD(0)
+        #buff = ctypes.create_string_buffer(4)
+        #ReadConsoleA(self.stdin_handle, buff, n, byref(out), None)
+        #print(buff[0])
+        #print(out)
+        #return buff[0] 
 
     def getche(self):
         return msvcrt.getche()
 
-    def kbhit(self, timeout=0):
+    def kbhit(self, timeout=0): # Ignores timeout... should be slown down
+        #t = DWORD(int(timeout*1000))
+        #t = timeout 
+        #return WaitForSingleObject(TerminalWindows.STD_INPUT_HANDLE, t) == TerminalWindows.WAIT_OBJECT_0 
         return msvcrt.kbhit()
 
     def no_colors(self):
@@ -87,58 +98,89 @@ class TerminalWindows:
 
         self.__set_text_attr(fg + bk)
         
+    def __get_console_info(self):
+        csbi = CONSOLE_SCREEN_BUFFER_INFO()
+        GetConsoleScreenBufferInfo(self.stdout_handle, byref(csbi))
+        return csbi
+        
     def __get_text_attr(self):
-          csbi = self.CONSOLE_SCREEN_BUFFER_INFO()
-          self.GetConsoleScreenBufferInfo(self.stdout_handle, byref(csbi))
-          return csbi.wAttributes
+          return self.__get_console_info().wAttributes
 
-    def __set_text_attr(self):
-          self.SetConsoleTextAttribute(stdout_handle, color)
+    def __set_text_attr(self, color):
+          sys.stdout.flush()
+          SetConsoleTextAttribute(self.stdout_handle, color)
 
     def set_title(self, title):
         ctitle = c_char_p(title)
-        self.SetConsoleTitle(ctitle)
+        SetConsoleTitle(ctitle)
 
     def cprint(self, fg, bk, text):
         self.set_color(fg, bk)
         print (text,end="")
+        sys.stdout.flush()
 
     def print_at(self, x, y, text):
             self.gotoXY(x, y)
             print(text,end="")
+            sys.stdout.flush()
 
-    def clear(self):
-        pass
+    def clear(self):              # From kb q99261
+        rp = COORD()
+        wr = DWORD()
+        csbi = CONSOLE_SCREEN_BUFFER_INFO()
+        GetConsoleScreenBufferInfo(self.stdout_handle, byref(csbi))
+        sx = csbi.dwSize.X * csbi.dwSize.Y
+        
+        FillConsoleOutputCharacter( self.stdout_handle, 0,
+                                    sx, rp, byref(wr))
+        FillConsoleOutputAttribute( self.stdout_handle, csbi.wAttributes,
+                                    sx, rp, byref(wr) );                                        
 
     def gotoXY(self, x,y):
+        p = COORD()
+        p.X = int(x)
+        p.Y = int(y)
+        SetConsoleCursorPosition(self.stdout_handle, p)
         pass
 
     def save_pos(self):
+        csbi = __get_console_info()
+        self.savedX = csbi.dwCursorPosition.X
+        self.savedY = csbi.dwCursorPosition.Y
         pass
 
     def restore_pos(self):
-        pass
+        self.gotoXY(self.savedX, self.savedY)
 
     def reset(self):
-        pass
+        self.__set_text_attr(self.reset_attrib)
+        
+    def __move_from(self, dx, dy):
+        csbi = self.__get_console_info()
+        ax = csbi.dwCursorPosition.X
+        ay = csbi.dwCursorPosition.Y
+        self.gotoXY(ax+dx, ay+dy)
+        
 
     def move_left(self, c = 1):
-        pass
+        self.__move_from(-c,0)
 
     def move_right(self, c = 1):
-        pass
+        self.__move_from(c,0)
 
     def move_up(self, c = 1):
-        pass
+        self.__move_from(0,-c)
 
     def move_down(self, c = 1):
-        pass
+        self.__move_from(0,c)
 
     def columns(self):
-        pass
+        csbi = self.__get_console_info()
+        return csbi.dwSize.X
         
     def lines(self):
-        pass
+        csbi = self.__get_console_info()
+        return csbi.dwSize.Y
 
 
 
@@ -186,6 +228,8 @@ class TerminalANSIPosix:
                   }
     
     def __init__(self):
+        
+        
         self.fg = None
         self.bk = None
         self.havecolor = 1
@@ -239,6 +283,7 @@ class TerminalANSIPosix:
     def cprint(self, fg, bk, text):
         self.set_color(fg, bk)
         print (text,end="")
+        
     
     def print_at(self, x, y, text):
             self.gotoXY(x, y)
@@ -282,6 +327,54 @@ class TerminalANSIPosix:
             return os.environ["LINES"]
         else:
             return 0
+
+
+
+if os.name == "nt":
+        import msvcrt
+        import ctypes
+        from ctypes import windll, Structure, c_short, c_ushort, byref, c_char_p, c_uint
+        SHORT = c_short
+        WORD = c_ushort
+        DWORD = c_uint
+
+        class COORD(Structure):
+          """struct in wincon.h."""
+          _fields_ = [
+            ("X", SHORT),
+            ("Y", SHORT)]
+
+        class SMALL_RECT(Structure):
+          """struct in wincon.h."""
+          _fields_ = [
+            ("Left", SHORT),
+            ("Top", SHORT),
+            ("Right", SHORT),
+            ("Bottom", SHORT)]
+
+        class CONSOLE_SCREEN_BUFFER_INFO(Structure):
+          """struct in wincon.h."""
+          _fields_ = [
+            ("dwSize", COORD),
+            ("dwCursorPosition", COORD),
+            ("wAttributes", WORD),
+            ("srWindow", SMALL_RECT),
+            ("dwMaximumWindowSize", COORD)]
+        SetConsoleTextAttribute = windll.kernel32.SetConsoleTextAttribute
+        GetConsoleScreenBufferInfo = windll.kernel32.GetConsoleScreenBufferInfo
+        SetConsoleTitle = windll.kernel32.SetConsoleTitleA
+        GetConsoleTitle = windll.kernel32.GetConsoleTitleA
+        SetConsoleCursorPosition = windll.kernel32.SetConsoleCursorPosition
+        FillConsoleOutputCharacter = windll.kernel32.FillConsoleOutputCharacterA
+        FillConsoleOutputAttribute = windll.kernel32.FillConsoleOutputAttribute
+        WaitForSingleObject = windll.kernel32.WaitForSingleObject
+        ReadConsoleA = windll.kernel32.ReadConsoleA
+
+if os.name == "posix":
+  import termios
+  from select import select   
+
+
 
 
 if __name__ == "__main__":
