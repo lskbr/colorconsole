@@ -86,7 +86,7 @@ class Terminal:
         self.savedY = 0
        
     def restore_buffered_mode(self):
-        self.__set_text_attr(self.reset_attrib)
+        pass
 
     def enable_unbuffered_input_mode(self):
         pass
@@ -96,21 +96,11 @@ class Terminal:
 
     def getch(self):
         return msvcrt.getch()
-        #n = DWORD(1)
-        #out = DWORD(0)
-        #buff = ctypes.create_string_buffer(4)
-        #ReadConsoleA(self.stdin_handle, buff, n, byref(out), None)
-        #print(buff[0])
-        #print(out)
-        #return buff[0] 
 
     def getche(self):
         return msvcrt.getche()
 
-    def kbhit(self, timeout=0): # Ignores timeout... should be slown down
-        #t = DWORD(int(timeout*1000))
-        #t = timeout 
-        #return WaitForSingleObject(Terminal.STD_INPUT_HANDLE, t) == Terminal.WAIT_OBJECT_0 
+    def kbhit(self, timeout=0): # Ignores timeout... should be slown down         
         return msvcrt.kbhit()
 
     def no_colors(self):
@@ -160,7 +150,7 @@ class Terminal:
         GetConsoleScreenBufferInfo(self.stdout_handle, byref(csbi))
         sx = csbi.dwSize.X * csbi.dwSize.Y
         
-        FillConsoleOutputCharacter( self.stdout_handle, 0,
+        FillConsoleOutputCharacter( self.stdout_handle, 32,
                                     sx, rp, byref(wr))
         FillConsoleOutputAttribute( self.stdout_handle, csbi.wAttributes,
                                     sx, rp, byref(wr) );                                        
