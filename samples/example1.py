@@ -2,6 +2,7 @@ import math
 from colorconsole import terminal
 
 screen = terminal.get_terminal(conEmu=False)
+screen.set_title("Example 1")
 screen.set_color(terminal.colors["WHITE"],terminal.colors["BLUE"])
 screen.clear()
 
