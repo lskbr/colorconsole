@@ -29,7 +29,7 @@ from __future__ import print_function
 import os,sys
 import msvcrt
 import ctypes
-from ctypes import windll, Structure, c_short, c_ushort, byref, c_char_p, c_uint
+from ctypes import windll, Structure, c_short, c_ushort, byref, c_char_p, c_uint, c_wchar_p
 
 SHORT = c_short
 WORD = c_ushort
@@ -60,13 +60,19 @@ class CONSOLE_SCREEN_BUFFER_INFO(Structure):
     
 SetConsoleTextAttribute = windll.kernel32.SetConsoleTextAttribute
 GetConsoleScreenBufferInfo = windll.kernel32.GetConsoleScreenBufferInfo
-SetConsoleTitle = windll.kernel32.SetConsoleTitleA
-GetConsoleTitle = windll.kernel32.GetConsoleTitleA
+# Added for compatibility between python 2 and 3
+if sys.version_info[0] == 3:
+    SetConsoleTitle = windll.kernel32.SetConsoleTitleW
+    cstring_p = c_wchar_p
+else:
+    SetConsoleTitle = windll.kernel32.SetConsoleTitleA
+    cstring_p = c_char_p
+#GetConsoleTitle = windll.kernel32.GetConsoleTitleW
 SetConsoleCursorPosition = windll.kernel32.SetConsoleCursorPosition
 FillConsoleOutputCharacter = windll.kernel32.FillConsoleOutputCharacterA
 FillConsoleOutputAttribute = windll.kernel32.FillConsoleOutputAttribute
-WaitForSingleObject = windll.kernel32.WaitForSingleObject
-ReadConsoleA = windll.kernel32.ReadConsoleA
+#WaitForSingleObject = windll.kernel32.WaitForSingleObject
+#ReadConsoleA = windll.kernel32.ReadConsoleA
 
 class Terminal:
     STD_INPUT_HANDLE = -10
@@ -131,7 +137,7 @@ class Terminal:
           SetConsoleTextAttribute(self.stdout_handle, color)
 
     def set_title(self, title):
-        ctitle = c_char_p(title)
+        ctitle = cstring_p(title)
         SetConsoleTitle(ctitle)
 
     def cprint(self, fg, bk, text):

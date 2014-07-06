@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 #
 #    colorconsole
-#    Copyright (C) 2010 Nilo Menezes
+#    Copyright (C) 2010-2014 Nilo Menezes
 #
 #    This library is free software; you can redistribute it and/or
 #    modify it under the terms of the GNU Lesser General Public
@@ -20,11 +20,11 @@
 from distutils.core import setup
 
 setup(name='colorconsole',
-      version='0.7',
+      version='0.7.1',
       description = "Simple console routines to enable colors and cursor positioning.",
       author='Nilo Menezes',
       author_email='nilo@nilo.pro.br',
-      url='http://code.google.com/p/colorconsole/',
+      url='https://github.com/lskbr/colorconsole',
       packages=['colorconsole'],
       license = "LGPL",
       scripts=[],    
@@ -36,7 +36,7 @@ The Windows API or ANSI scape codes are used depending on the platform.
 This library is licensed under the terms of the GNU LGPL.
 """,
       classifiers=[
-        'Development Status :: 5 - Stable',
+        'Development Status :: 5 - Production/Stable',
         'Environment :: Console',
           'Intended Audience :: End Users/Desktop',
           'Intended Audience :: Developers',
