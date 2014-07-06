@@ -45,15 +45,19 @@ colors= { "BLACK"   : 0,
           "YELLOW"  : 14,
           "WHITE"   : 15  }
 
-def get_terminal():
-    if os.name == "nt":
-        import colorconsole.win        
-        return colorconsole.win.Terminal()
+def get_terminal(conEmu=False):
     if os.name == "posix":
         import colorconsole.ansi       
         return colorconsole.ansi.Terminal()
+    elif os.name == "nt":
+        if conEmu:
+          import colorconsole.conemu
+          return colorconsole.conemu.Terminal()
+        else:
+          import colorconsole.win        
+          return colorconsole.win.Terminal()  
     else:
-        return None # Should raise exception!
+        raise RuntimeError("Unknown or unsupported terminal")
 
 
 def test():

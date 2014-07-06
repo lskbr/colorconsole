@@ -84,6 +84,7 @@ class Terminal:
         self.reset_attrib = self.__get_text_attr()
         self.savedX = 0
         self.savedY = 0
+        self.type = "WIN"
        
     def restore_buffered_mode(self):
         pass
@@ -199,6 +200,7 @@ class Terminal:
     def lines(self):
         csbi = self.__get_console_info()
         return csbi.dwSize.Y
+        
     def blink(self):
         pass
 

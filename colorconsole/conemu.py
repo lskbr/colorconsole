@@ -27,12 +27,54 @@
 # Added for Python 2.6 compatibility
 from __future__ import print_function
 import os,sys
-import termios
-from select import select
+import msvcrt
+import ctypes
+from ctypes import windll, Structure, c_short, c_ushort, byref, c_char_p, c_uint
+
+SHORT = c_short
+WORD = c_ushort
+DWORD = c_uint
+
+class COORD(Structure):
+  """struct in wincon.h."""
+  _fields_ = [
+    ("X", SHORT),
+    ("Y", SHORT)]
+
+class SMALL_RECT(Structure):
+  """struct in wincon.h."""
+  _fields_ = [
+    ("Left", SHORT),
+    ("Top", SHORT),
+    ("Right", SHORT),
+    ("Bottom", SHORT)]
+
+class CONSOLE_SCREEN_BUFFER_INFO(Structure):
+  """struct in wincon.h."""
+  _fields_ = [
+    ("dwSize", COORD),
+    ("dwCursorPosition", COORD),
+    ("wAttributes", WORD),
+    ("srWindow", SMALL_RECT),
+    ("dwMaximumWindowSize", COORD)]
+    
+SetConsoleTextAttribute = windll.kernel32.SetConsoleTextAttribute
+GetConsoleScreenBufferInfo = windll.kernel32.GetConsoleScreenBufferInfo
+SetConsoleTitle = windll.kernel32.SetConsoleTitleA
+GetConsoleTitle = windll.kernel32.GetConsoleTitleA
+SetConsoleCursorPosition = windll.kernel32.SetConsoleCursorPosition
+FillConsoleOutputCharacter = windll.kernel32.FillConsoleOutputCharacterA
+FillConsoleOutputAttribute = windll.kernel32.FillConsoleOutputAttribute
+WaitForSingleObject = windll.kernel32.WaitForSingleObject
+ReadConsoleA = windll.kernel32.ReadConsoleA
       
 
 
 class Terminal:
+    STD_INPUT_HANDLE = -10
+    STD_OUTPUT_HANDLE = -11
+    WAIT_TIMEOUT = 0x00000102
+    WAIT_OBJECT_0 = 0
     escape = "\x1b["
     codes={
            "reset": escape + "0m",
@@ -85,42 +127,39 @@ class Terminal:
         self.fg = None
         self.bk = None
         self.havecolor = 1
-        self.dotitles = 1
-        self.fd = sys.stdin.fileno()
-        self.new_term = termios.tcgetattr(self.fd)
-        self.old_term = termios.tcgetattr(self.fd)
-        self.new_term[3] = (self.new_term[3] & ~termios.ICANON & ~termios.ECHO)
-        self.ncolumns = 80
-        self.nlines = 24        
-        if "TERM" in os.environ:
-           self.type = os.environ["TERM"]
-        else:
-           self.type = "UNKNOWN-ANSI"
+        self.dotitles = 1        
+        self.stdout_handle = windll.kernel32.GetStdHandle(Terminal.STD_OUTPUT_HANDLE)
+        self.stdin_handle = windll.kernel32.GetStdHandle(Terminal.STD_INPUT_HANDLE)
+        self.reset_attrib = self.__get_text_attr()
+        self.savedX = 0
+        self.savedY = 0
+        self.type = "CONEMU" 
 
+    def __get_console_info(self):
+        csbi = CONSOLE_SCREEN_BUFFER_INFO()
+        GetConsoleScreenBufferInfo(self.stdout_handle, byref(csbi))
+        return csbi
+        
+    def __get_text_attr(self):
+          return self.__get_console_info().wAttributes              
         
     def restore_buffered_mode(self):        
-        termios.tcsetattr(self.fd, termios.TCSAFLUSH, self.old_term)
-
+        pass
 
     def enable_unbuffered_input_mode(self):
-        termios.tcsetattr(self.fd, termios.TCSAFLUSH, self.new_term)
+        pass
             
     def putch(self, ch):
-        sys.stdout.write(ch)
+        msvcrt.putc(ch)
 
     def getch(self):
-        return sys.stdin.read(1)
+        return msvcrt.getch()
 
     def getche(self):
-        ch = self.getch()
-        self.putch(ch)
-        return ch
+        return msvcrt.getche()
 
     def kbhit(self, timeout=0):
-        #self.print_at(40,1, "WAITING")
-        dr,dw,de = select([sys.stdin], [], [], timeout)
-        #self.print_at(40,1, "DONE   ")
-        return dr != []
+        return msvcrt.kbhit()
         
     def no_colors(self):
         self.havecolor = 0    
@@ -173,10 +212,12 @@ class Terminal:
         sys.stdout.write(Terminal.codes["move_down"] % c)
         
     def columns(self):
-        return int(os.getenv("COLUMNS", self.ncolumns))
+        csbi = self.__get_console_info()
+        return csbi.dwSize.X
     
     def lines(self):
-        return int(os.getenv("LINES", self.nlines))
+        csbi = self.__get_console_info()
+        return csbi.dwSize.Y
 
     def underline(self):
         sys.stdout.write(Terminal.codes["underline"])

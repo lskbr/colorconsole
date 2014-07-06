@@ -1,8 +1,10 @@
 from __future__ import print_function
 from colorconsole import terminal
 
-screen = terminal.get_terminal()
+screen = terminal.get_terminal(conEmu=False)
 screen.clear()
+screen.set_title("Example 2")
+
 screen.print_at(0,0,"Color table")
 
 if screen.type == "WIN":
@@ -24,3 +26,5 @@ else:
     print()    
 screen.reset_colors()
 
+# Waits for a single key touch before ending.
+screen.getch()

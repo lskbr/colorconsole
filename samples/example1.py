@@ -1,7 +1,7 @@
 import math
 from colorconsole import terminal
 
-screen = terminal.get_terminal()
+screen = terminal.get_terminal(conEmu=False)
 screen.set_color(terminal.colors["WHITE"],terminal.colors["BLUE"])
 screen.clear()
 
@@ -17,3 +17,5 @@ for x in range(screen.columns()):
 	screen.print_at(x, 11+math.cos(x*step)*10, "C"  )
 
 screen.reset_colors()
+# Waits for a single key touch before ending.
+screen.getch()
