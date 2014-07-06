@@ -20,7 +20,7 @@
 from distutils.core import setup
 
 setup(name='colorconsole',
-      version='0.6',
+      version='0.7',
       description = "Simple console routines to enable colors and cursor positioning.",
       author='Nilo Menezes',
       author_email='nilo@nilo.pro.br',
@@ -36,7 +36,7 @@ The Windows API or ANSI scape codes are used depending on the platform.
 This library is licensed under the terms of the GNU LGPL.
 """,
       classifiers=[
-        'Development Status :: 4 - Beta',
+        'Development Status :: 5 - Stable',
         'Environment :: Console',
           'Intended Audience :: End Users/Desktop',
           'Intended Audience :: Developers',
