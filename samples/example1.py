@@ -2,7 +2,7 @@ import math
 from colorconsole import terminal
 
 screen = terminal.get_terminal()
-screen.set_color(terminal.colors["WHITE"],terminal.colors["LBLUE"])
+screen.set_color(terminal.colors["WHITE"],terminal.colors["BLUE"])
 screen.clear()
 
 PI = math.pi
@@ -16,4 +16,4 @@ for x in range(screen.columns()):
 	screen.set_color(1,2)
 	screen.print_at(x, 11+math.cos(x*step)*10, "C"  )
 
-
+screen.reset_colors()

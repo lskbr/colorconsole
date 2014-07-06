@@ -163,7 +163,7 @@ class Terminal:
         pass
 
     def save_pos(self):
-        csbi = __get_console_info()
+        csbi = self.__get_console_info()
         self.savedX = csbi.dwCursorPosition.X
         self.savedY = csbi.dwCursorPosition.Y
         pass
@@ -179,7 +179,6 @@ class Terminal:
         ax = csbi.dwCursorPosition.X
         ay = csbi.dwCursorPosition.Y
         self.gotoXY(ax+dx, ay+dy)
-        
 
     def move_left(self, c = 1):
         self.__move_from(-c,0)
@@ -200,4 +199,16 @@ class Terminal:
     def lines(self):
         csbi = self.__get_console_info()
         return csbi.dwSize.Y
+    def blink(self):
+        pass
+
+    def reverse(self):
+        pass
+
+    def invisible(self):
+        pass
+
+    def reset_colors(self):
+        self.reset()
+
 
