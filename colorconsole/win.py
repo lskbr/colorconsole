@@ -29,11 +29,20 @@ from __future__ import print_function
 import os,sys
 import msvcrt
 import ctypes
-from ctypes import windll, Structure, c_short, c_ushort, byref, c_char_p, c_uint, c_wchar_p
+from ctypes import windll, Structure, c_short, c_ushort, byref, c_char_p, c_uint, c_wchar_p, c_char, c_uint16
 
+CHAR = c_char
 SHORT = c_short
 WORD = c_ushort
 DWORD = c_uint
+DWORD16 = c_uint16
+
+
+class CHAR_INFO(Structure):
+    """struct in wincon.h."""
+    _fields_ = [
+        ('ascii', CHAR), 
+        ('attr', DWORD16)]
 
 class COORD(Structure):
   """struct in wincon.h."""
@@ -71,6 +80,7 @@ else:
 SetConsoleCursorPosition = windll.kernel32.SetConsoleCursorPosition
 FillConsoleOutputCharacter = windll.kernel32.FillConsoleOutputCharacterA
 FillConsoleOutputAttribute = windll.kernel32.FillConsoleOutputAttribute
+WriteConsoleOutputA = windll.kernel32.WriteConsoleOutputA
 #WaitForSingleObject = windll.kernel32.WaitForSingleObject
 #ReadConsoleA = windll.kernel32.ReadConsoleA
 
@@ -91,7 +101,39 @@ class Terminal:
         self.savedX = 0
         self.savedY = 0
         self.type = "WIN"
-       
+
+    def init_buffer(self, width, height):
+        self.width = width
+        self.height = height
+
+        self.buffer = (CHAR_INFO * (width * height))()
+        self.buffer_size = COORD(width, height)
+        self.buffer_coord = COORD(0, 0)
+        self.buffer_write_region = SMALL_RECT(0, 0, width - 1, height - 1)
+
+        for i in range(0, width * height):
+            self.buffer[i].ascii = ord(' ')
+            self.buffer[i].attr = 1
+
+    def set_buffer_char(self, index, c, fg = None, bk = None):
+        if type(c) is int:
+            self.buffer[index].ascii = 48 + c
+        else:
+            self.buffer[index].ascii = ord(c)
+        
+        actual = self.buffer[index].attr
+        if fg == None:
+            fg = actual & 0x000F
+        if bk == None:
+            bk = actual & 0x00F0
+        else:
+            bk <<=4
+
+        self.buffer[index].attr = fg + bk
+
+    def print_buffer(self):
+        WriteConsoleOutputA(self.stdout_handle, self.buffer, self.buffer_size, self.buffer_coord, byref(self.buffer_write_region))
+
     def restore_buffered_mode(self):
         pass
 
@@ -218,5 +260,3 @@ class Terminal:
 
     def reset_colors(self):
         self.reset()
-
-
