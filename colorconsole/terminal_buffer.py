@@ -25,20 +25,12 @@ import os,sys
 from ctypes import windll, Structure, c_short, c_ushort, byref, c_char_p, c_uint, c_wchar_p, c_char, c_uint16
 import time
 
-def get_terminal(conEmu=False):
-    if os.name == "posix":
-        import colorconsole.ansi       
-        return colorconsole.ansi.Terminal()
-    elif os.name == "nt":
-        if conEmu:
-          import colorconsole.conemu
-          return colorconsole.conemu.Terminal()
-        else:
-          import colorconsole.win        
-          return colorconsole.win.Terminal()  
+def get_terminal():
+    if os.name == "nt":
+        import colorconsole.win        
+        return colorconsole.win.Terminal()  
     else:
         raise RuntimeError("Unknown or unsupported terminal")
-
 
 def test():
     t = get_terminal()
@@ -54,9 +46,6 @@ def test():
 
     try:
         while(True):
-            #for i in range(0, width * height):
-            #    t.set_buffer_char(i, i % 10, 0, 255)
-
             s=str(int(time.time()))
             t.set_buffer_string(1, 10, s, 10, 0)
             t.set_buffer_string(0, 0, u"line0", 10, 0)
