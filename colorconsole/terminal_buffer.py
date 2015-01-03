@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# -*- coding: utf8 -*-
 #
 #    colorconsole
 #    Copyright (C) 2014 Sylvain MOUQUET
@@ -43,7 +44,7 @@ def test():
     t = get_terminal()
     t.enable_unbuffered_input_mode()
     t.clear()
-    t.set_title("Testing buffer")
+    t.set_title(u"Test buffer UTF8 éà@èù")
 
     width  = t.columns() #100
     height = t.lines()   #50
@@ -52,13 +53,17 @@ def test():
     t.gotoXY(0,0)
 
     try:
-        a = 0
         while(True):
-            for i in range(0, width * height):
-                t.set_buffer_char(i, i % 10, 0, 255)
+            #for i in range(0, width * height):
+            #    t.set_buffer_char(i, i % 10, 0, 255)
 
+            s=str(int(time.time()))
+            t.set_buffer_string(1, 10, s, 10, 0)
+            t.set_buffer_string(0, 0, u"line0", 10, 0)
+            t.set_buffer_string(0, 1, u"line1", 10, 0)
+            t.set_buffer_string(0, 2, u"line2", 10, 0)
+            t.set_buffer_string(0, 5, u"éà@èù", 10, 0)
             t.print_buffer()
-            a = a + 1
             time.sleep(1)
     except KeyboardInterrupt:
         pass

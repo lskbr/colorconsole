@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# -*- coding: utf8 -*-
 #
 #    colorconsole
 #    Copyright (C) 2010 Nilo Menezes
@@ -65,9 +66,11 @@ def test():
     t.enable_unbuffered_input_mode()
     t.clear()
     t.gotoXY(0,0)
-    t.set_title("Testing output")
-    print("            Foreground 111111")
-    print("Background   0123456789012345")
+    t.set_title(u"Testing output UTF8 éà@èù")
+    print(u"            Foreground 111111")
+    print(u"Background   0123456789012345")
+    print(u"UTF8 éà@èù")
+
     for b in range(8):
         t.reset()
         print("            ",end="")
@@ -78,6 +81,7 @@ def test():
     a = 0
     b = 0
     t.reset()
+    t.print_at(0,13, u"UTF8 éà@èù")
     try:
         while(True):
             t.print_at(a , 20 + b % 20, ".")

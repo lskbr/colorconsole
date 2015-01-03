@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+# -*- coding: utf8 -*-
 #
 #    colorconsole
 #    Copyright (C) 2010 Nilo Menezes
@@ -29,19 +30,19 @@ from __future__ import print_function
 import os,sys
 import msvcrt
 import ctypes
-from ctypes import windll, Structure, c_short, c_ushort, byref, c_char_p, c_uint, c_wchar_p, c_char, c_uint16
+from ctypes import windll, Structure, c_short, c_ushort, byref, c_char_p, c_uint, c_wchar_p, c_char, c_uint16, c_wchar
 
 CHAR = c_char
+WCHAR = c_wchar
 SHORT = c_short
 WORD = c_ushort
 DWORD = c_uint
 DWORD16 = c_uint16
 
-
 class CHAR_INFO(Structure):
     """struct in wincon.h."""
     _fields_ = [
-        ('ascii', CHAR), 
+        ('unicode', WCHAR), 
         ('attr', DWORD16)]
 
 class COORD(Structure):
@@ -69,18 +70,13 @@ class CONSOLE_SCREEN_BUFFER_INFO(Structure):
     
 SetConsoleTextAttribute = windll.kernel32.SetConsoleTextAttribute
 GetConsoleScreenBufferInfo = windll.kernel32.GetConsoleScreenBufferInfo
-# Added for compatibility between python 2 and 3
-if sys.version_info[0] == 3:
-    SetConsoleTitle = windll.kernel32.SetConsoleTitleW
-    cstring_p = c_wchar_p
-else:
-    SetConsoleTitle = windll.kernel32.SetConsoleTitleA
-    cstring_p = c_char_p
+
+SetConsoleTitle = windll.kernel32.SetConsoleTitleW
 #GetConsoleTitle = windll.kernel32.GetConsoleTitleW
 SetConsoleCursorPosition = windll.kernel32.SetConsoleCursorPosition
 FillConsoleOutputCharacter = windll.kernel32.FillConsoleOutputCharacterA
 FillConsoleOutputAttribute = windll.kernel32.FillConsoleOutputAttribute
-WriteConsoleOutputA = windll.kernel32.WriteConsoleOutputA
+WriteConsoleOutputW = windll.kernel32.WriteConsoleOutputW
 #WaitForSingleObject = windll.kernel32.WaitForSingleObject
 #ReadConsoleA = windll.kernel32.ReadConsoleA
 
@@ -111,16 +107,20 @@ class Terminal:
         self.buffer_coord = COORD(0, 0)
         self.buffer_write_region = SMALL_RECT(0, 0, width - 1, height - 1)
 
-        for i in range(0, width * height):
-            self.buffer[i].ascii = ord(' ')
+        self.clear_buffer()
+
+    def clear_buffer(self):
+        for i in range(0, self.width * self.height):
+            self.buffer[i].unicode = ' '
             self.buffer[i].attr = 1
 
-    def set_buffer_char(self, index, c, fg = None, bk = None):
-        if type(c) is int:
-            self.buffer[index].ascii = 48 + c
-        else:
-            self.buffer[index].ascii = ord(c)
-        
+    def set_buffer_string(self, x, y, str, fg = None, bk = None):
+        for i in range(0, len(str)):
+            index = (y * self.width) + x + i
+            self.buffer[index].unicode = str[i]
+            self.set_buffer_attr(index, fg, bk)
+
+    def set_buffer_attr(self, index, fg = None, bk = None):
         actual = self.buffer[index].attr
         if fg == None:
             fg = actual & 0x000F
@@ -132,7 +132,7 @@ class Terminal:
         self.buffer[index].attr = fg + bk
 
     def print_buffer(self):
-        WriteConsoleOutputA(self.stdout_handle, self.buffer, self.buffer_size, self.buffer_coord, byref(self.buffer_write_region))
+        WriteConsoleOutputW(self.stdout_handle, self.buffer, self.buffer_size, self.buffer_coord, byref(self.buffer_write_region))
 
     def restore_buffered_mode(self):
         pass
@@ -179,7 +179,7 @@ class Terminal:
           SetConsoleTextAttribute(self.stdout_handle, color)
 
     def set_title(self, title):
-        ctitle = cstring_p(title)
+        ctitle = c_wchar_p(title)
         SetConsoleTitle(ctitle)
 
     def cprint(self, fg, bk, text):
