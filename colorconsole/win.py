@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 #
 #    colorconsole
-#    Copyright (C) 2010 Nilo Menezes
+#    Copyright (C) 2010-2015 Nilo Menezes
 #
 #    This library is free software; you can redistribute it and/or
 #    modify it under the terms of the GNU Lesser General Public
@@ -23,7 +23,9 @@
 # http://code.activestate.com/recipes/572182-how-to-implement-kbhit-on-linux/ and
 # http://www.burgaud.com/bring-colors-to-the-windows-console-with-python/
 #
-
+# Thanks to: Sylvain MOUQUET (https://github.com/sylvainmouquet) for set_title bug fixing and enhancements
+#
+#
 # Added for Python 2.6 compatibility
 from __future__ import print_function
 import os,sys
@@ -58,21 +60,23 @@ class CONSOLE_SCREEN_BUFFER_INFO(Structure):
     ("srWindow", SMALL_RECT),
     ("dwMaximumWindowSize", COORD)]
     
+
 SetConsoleTextAttribute = windll.kernel32.SetConsoleTextAttribute
 GetConsoleScreenBufferInfo = windll.kernel32.GetConsoleScreenBufferInfo
 # Added for compatibility between python 2 and 3
-if sys.version_info[0] == 3:
-    SetConsoleTitle = windll.kernel32.SetConsoleTitleW
-    cstring_p = c_wchar_p
-else:
-    SetConsoleTitle = windll.kernel32.SetConsoleTitleA
-    cstring_p = c_char_p
-#GetConsoleTitle = windll.kernel32.GetConsoleTitleW
+#if sys.version_info[0] == 3:
+SetConsoleTitle = windll.kernel32.SetConsoleTitleW
+cstring_p = c_wchar_p
+#else:
+#   SetConsoleTitle = Python2SetConsoleTitle #windll.kernel32.SetConsoleTitleA
+#   cstring_p = Python2CCharP # c_char_p
+GetConsoleTitle = windll.kernel32.GetConsoleTitleW
 SetConsoleCursorPosition = windll.kernel32.SetConsoleCursorPosition
 FillConsoleOutputCharacter = windll.kernel32.FillConsoleOutputCharacterA
 FillConsoleOutputAttribute = windll.kernel32.FillConsoleOutputAttribute
 #WaitForSingleObject = windll.kernel32.WaitForSingleObject
 #ReadConsoleA = windll.kernel32.ReadConsoleA
+WriteConsoleW = windll.kernel32.WriteConsoleW
 
 class Terminal:
     STD_INPUT_HANDLE = -10
@@ -142,13 +146,13 @@ class Terminal:
 
     def cprint(self, fg, bk, text):
         self.set_color(fg, bk)
-        print (text,end="")
-        sys.stdout.flush()
+        self.win_print (text) # print(text,end="")
+        #sys.stdout.flush()
 
     def print_at(self, x, y, text):
             self.gotoXY(x, y)
-            print(text,end="")
-            sys.stdout.flush()
+            self.win_print(text) # print(text,end="")
+            #sys.stdout.flush()
 
     def clear(self):              # From kb q99261
         rp = COORD()
@@ -218,5 +222,13 @@ class Terminal:
 
     def reset_colors(self):
         self.reset()
+
+    def win_print(self, x):
+        if(type(x)!=str and type(x)!=unicode):
+            x=str(x)
+        l = len(x)
+        w = DWORD(0)
+        WriteConsoleW(self.stdout_handle, cstring_p(x), l , byref(w) , None)
+        #sys.stdout.flush()
 
 
