@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# -*- coding: utf8 -*-
+# -*- coding: utf-8 -*-
 #
 #    colorconsole
 #    Copyright (C) 2014 Sylvain MOUQUET

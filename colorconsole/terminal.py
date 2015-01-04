@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-# -*- coding: utf8 -*-
+# -*- coding: utf-8 -*-
 #
 #    colorconsole
 #    Copyright (C) 2010 Nilo Menezes
@@ -69,7 +69,7 @@ def test():
     t.set_title(u"Testing output UTF8 éà@èù")
     print(u"            Foreground 111111")
     print(u"Background   0123456789012345")
-    print(u"UTF8 éà@èù")
+    print(u"UTF8 éà@èu")
 
     for b in range(8):
         t.reset()
