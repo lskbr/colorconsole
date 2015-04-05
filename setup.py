@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 #
 #    colorconsole
-#    Copyright (C) 2010-2014 Nilo Menezes
+#    Copyright (C) 2010-2015 Nilo Menezes
 #
 #    This library is free software; you can redistribute it and/or
 #    modify it under the terms of the GNU Lesser General Public
@@ -20,21 +20,19 @@
 from distutils.core import setup
 
 setup(name='colorconsole',
-      version='0.7.1',
-      description = "Simple console routines to enable colors and cursor positioning.",
+      version='0.7.2',
+      description="Simple console routines to enable colors and cursor positioning.",
       author='Nilo Menezes',
       author_email='nilo@nilo.pro.br',
       url='https://github.com/lskbr/colorconsole',
       packages=['colorconsole'],
-      license = "LGPL",
-      scripts=[],    
-      long_description = 
-      """
-colorconsole uses a common set of console (text mode) primitives, available on Windows, Linux and Mac OS X.
-The API is the same on all operating systems and applications should run without modifications on any of them.
-The Windows API or ANSI scape codes are used depending on the platform.
-This library is licensed under the terms of the GNU LGPL.
-""",
+      license="LGPL",
+      scripts=[],
+      long_description="""colorconsole uses a common set of console (text mode) primitives, \
+available on Windows, Linux and Mac OS X. The API is the same on all operating systems and \
+applications should run without modifications on any of them. The Windows API or ANSI scape \
+codes are used depending on the platform. This library is licensed under the terms of \
+the GNU LGPL.""",
       classifiers=[
         'Development Status :: 5 - Production/Stable',
         'Environment :: Console',
@@ -45,8 +43,6 @@ This library is licensed under the terms of the GNU LGPL.
           'Operating System :: MacOS :: MacOS X',
           'Operating System :: Microsoft :: Windows',
           'Operating System :: POSIX',
-          'Programming Language :: Python',          
-      ] ,
-      
-     )
-
+          'Programming Language :: Python',
+      ],
+      )
