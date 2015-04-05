@@ -1,0 +1,6 @@
+# example files
+include samples/*.py
+
+# misc
+include LICENSE.txt
+
