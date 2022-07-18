@@ -10,7 +10,7 @@ The documentation is on the project wiki [click here](https://github.com/lskbr/c
 
 Installation package:
 ---------------------
-Version 0.7.2
+Version 0.8.0
 
 PIP:
 
