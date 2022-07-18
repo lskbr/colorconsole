@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 #
 #    colorconsole
-#    Copyright (C) 2010-2015 Nilo Menezes
+#    Copyright © 2010-2022 Nilo Menezes
 #
 #    This library is free software; you can redistribute it and/or
 #    modify it under the terms of the GNU Lesser General Public
@@ -24,53 +24,11 @@
 # http://www.burgaud.com/bring-colors-to-the-windows-console-with-python/
 #
 
-# Added for Python 2.6 compatibility
-from __future__ import print_function
 import sys
 import msvcrt
-from ctypes import windll, Structure, c_short, c_ushort, byref, c_uint
-
-SHORT = c_short
-WORD = c_ushort
-DWORD = c_uint
-
-
-class COORD(Structure):
-    """struct in wincon.h."""
-    _fields_ = [
-                ("X", SHORT),
-                ("Y", SHORT)]
-
-
-class SMALL_RECT(Structure):
-    """struct in wincon.h."""
-    _fields_ = [
-                ("Left", SHORT),
-                ("Top", SHORT),
-                ("Right", SHORT),
-                ("Bottom", SHORT)
-                ]
-
-
-class CONSOLE_SCREEN_BUFFER_INFO(Structure):
-    """struct in wincon.h."""
-    _fields_ = [
-                ("dwSize", COORD),
-                ("dwCursorPosition", COORD),
-                ("wAttributes", WORD),
-                ("srWindow", SMALL_RECT),
-                ("dwMaximumWindowSize", COORD)
-                ]
-
-SetConsoleTextAttribute = windll.kernel32.SetConsoleTextAttribute
-GetConsoleScreenBufferInfo = windll.kernel32.GetConsoleScreenBufferInfo
-SetConsoleTitle = windll.kernel32.SetConsoleTitleA
-GetConsoleTitle = windll.kernel32.GetConsoleTitleA
-SetConsoleCursorPosition = windll.kernel32.SetConsoleCursorPosition
-FillConsoleOutputCharacter = windll.kernel32.FillConsoleOutputCharacterA
-FillConsoleOutputAttribute = windll.kernel32.FillConsoleOutputAttribute
-WaitForSingleObject = windll.kernel32.WaitForSingleObject
-ReadConsoleA = windll.kernel32.ReadConsoleA
+from ctypes import windll, byref
+from .ansi_codes import ESCAPE, CODES, COLORS_FG, COLORS_BK
+from .win_common import GetConsoleScreenBufferInfo, CONSOLE_SCREEN_BUFFER_INFO
 
 
 class Terminal:
@@ -78,55 +36,6 @@ class Terminal:
     STD_OUTPUT_HANDLE = -11
     WAIT_TIMEOUT = 0x00000102
     WAIT_OBJECT_0 = 0
-    escape = "\x1b["
-    codes = {
-             "reset": escape + "0m",
-             "bold": escape + "01m",
-             "clear": escape + "2J",
-             "clear_eol": escape + "K",
-             "gotoxy": escape + "%d;%dH",
-             "move_up": escape + "%dA",
-             "move_down": escape + "%dB",
-             "move_right": escape + "%dC",
-             "move_left": escape + "%dD",
-             "save": escape + "s",
-             "restore": escape + "u",
-             "dim": escape + "2m",
-             "underline": escape + "4m",
-             "blink": escape + "5m",
-             "reverse": escape + "7m",
-             "invisible": escape + "8m",
-            }
-
-    colors_fg = {
-                  0: "30m",
-                  1: "31m",
-                  2: "32m",
-                  3: "33m",
-                  4: "34m",
-                  5: "35m",
-                  6: "36m",
-                  7: "37m",
-                  8: "1;30m",
-                  9: "1;31m",
-                  10: "1;32m",
-                  11: "1;33m",
-                  12: "1;34m",
-                  13: "1;35m",
-                  14: "1;36m",
-                  15: "1;37m"
-                 }
-
-    colors_bk = {
-                  0: "40m",
-                  1: "41m",
-                  2: "42m",
-                  3: "43m",
-                  4: "44m",
-                  5: "45m",
-                  6: "46m",
-                  7: "47m",
-                  }
 
     def __init__(self):
         self.fg = None
@@ -139,6 +48,7 @@ class Terminal:
         self.savedX = 0
         self.savedY = 0
         self.type = "CONEMU"
+        self.new_windows_terminal = False
 
     def __get_console_info(self):
         csbi = CONSOLE_SCREEN_BUFFER_INFO()
@@ -146,7 +56,7 @@ class Terminal:
         return csbi
 
     def __get_text_attr(self):
-            return self.__get_console_info().wAttributes
+        return self.__get_console_info().wAttributes
 
     def restore_buffered_mode(self):
         pass
@@ -171,22 +81,22 @@ class Terminal:
 
     def set_color(self, fg=None, bk=None):
         if fg is not None:
-            sys.stdout.write(Terminal.escape + Terminal.colors_fg[fg])
+            sys.stdout.write(ESCAPE + COLORS_FG[fg])
         if bk is not None:
-            sys.stdout.write(Terminal.escape + Terminal.colors_bk[bk])
+            sys.stdout.write(ESCAPE + COLORS_BK[bk])
 
     def set_title(self, title):
         if self.type in ["xterm", "Eterm", "aterm", "rxvt", "xterm-color"]:
-            sys.stderr.write("\x1b]1;\x07\x1b]2;"+str(title)+"\x07")
+            sys.stderr.write("\x1b]1;\x07\x1b]2;" + str(title) + "\x07")
             sys.stderr.flush()
 
     def cprint(self, fg, bk, text):
         self.set_color(fg, bk)
-        print (text, end="")
+        print(text, end="")
 
     def print_at(self, x, y, text):
-            self.gotoXY(x, y)
-            print(text, end="")
+        self.gotoXY(x, y)
+        print(text, end="")
 
     def clear(self):
         sys.stdout.write(Terminal.codes["clear"])
@@ -210,10 +120,10 @@ class Terminal:
         sys.stdout.write(Terminal.codes["move_right"] % c)
 
     def move_up(self, c=1):
-        sys.stdout.write(Terminal.codes["move_up"] % c)
+        sys.stdout.write(CODES["move_up"] % c)
 
     def move_down(self, c=1):
-        sys.stdout.write(Terminal.codes["move_down"] % c)
+        sys.stdout.write(CODES["move_down"] % c)
 
     def columns(self):
         csbi = self.__get_console_info()
@@ -224,16 +134,16 @@ class Terminal:
         return csbi.dwSize.Y
 
     def underline(self):
-        sys.stdout.write(Terminal.codes["underline"])
+        sys.stdout.write(CODES["underline"])
 
     def blink(self):
-        sys.stdout.write(Terminal.codes["blink"])
+        sys.stdout.write(CODES["blink"])
 
     def reverse(self):
-        sys.stdout.write(Terminal.codes["reverse"])
+        sys.stdout.write(CODES["reverse"])
 
     def invisible(self):
-        sys.stdout.write(Terminal.codes["invisible"])
+        sys.stdout.write(CODES["invisible"])
 
     def reset_colors(self):
         self.default_background()
@@ -241,19 +151,19 @@ class Terminal:
         self.reset()
 
     def xterm256_set_fg_color(self, color):
-        sys.stdout.write(Terminal.escape+"38;5;%dm" % color)
+        sys.stdout.write(ESCAPE + "38;5;%dm" % color)
 
     def xterm24bit_set_fg_color(self, r, g, b):
-        sys.stdout.write(Terminal.escape + "38;2;%d;%d;%dm" % (r, g, b))
+        sys.stdout.write(ESCAPE + "38;2;%d;%d;%dm" % (r, g, b))
 
     def xterm256_set_bk_color(self, color):
-        sys.stdout.write(Terminal.escape + "48;5;%dm" % color)
+        sys.stdout.write(ESCAPE + "48;5;%dm" % color)
 
     def xterm24bit_set_bk_color(self, r, g, b):
-        sys.stdout.write(Terminal.escape + "48;2;%d;%d;%dm" % (r, g, b))
+        sys.stdout.write(ESCAPE + "48;2;%d;%d;%dm" % (r, g, b))
 
     def default_foreground(self):
-        sys.stdout.write(Terminal.escape + "39m")
+        sys.stdout.write(ESCAPE + "39m")
 
     def default_background(self):
-        sys.stdout.write(Terminal.escape + "49m")
+        sys.stdout.write(ESCAPE + "49m")
