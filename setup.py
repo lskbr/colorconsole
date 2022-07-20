@@ -21,7 +21,7 @@ from distutils.core import setup
 
 setup(
     name="colorconsole",
-    version="0.8.0",
+    version="0.8.1",
     description="Simple console routines to enable colors and cursor positioning.",
     author="Nilo Menezes",
     author_email="nilo@nilo.pro.br",

@@ -5,7 +5,7 @@ from colorconsole.terminal import color_numbers_to_names, colors, get_terminal
 
 
 def test():
-    t = get_terminal()
+    t = terminal.get_terminal(conEmu=terminal.is_conemu())
     t.enable_unbuffered_input_mode()
     t.set_color(fg=2, bk=0)
     t.clear()

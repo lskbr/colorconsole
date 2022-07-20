@@ -24,11 +24,21 @@
 # http://www.burgaud.com/bring-colors-to-the-windows-console-with-python/
 #
 
+from cgi import print_arguments
 import sys
 import msvcrt
 from ctypes import windll, byref
 from .ansi_codes import ESCAPE, CODES, COLORS_FG, COLORS_BK
-from .win_common import GetConsoleScreenBufferInfo, CONSOLE_SCREEN_BUFFER_INFO
+from .win_common import (
+    GetConsoleScreenBufferInfo,
+    CONSOLE_SCREEN_BUFFER_INFO,
+    SetConsoleCP,
+    SetConsoleOutputCP,
+    WriteConsoleA,
+    c_char_p,
+    DWORD,
+    CP_UTF8,
+)
 
 
 class Terminal:
@@ -49,6 +59,9 @@ class Terminal:
         self.savedY = 0
         self.type = "CONEMU"
         self.new_windows_terminal = False
+        SetConsoleCP(CP_UTF8)
+        SetConsoleOutputCP(CP_UTF8)
+        sys.stdout.reconfigure(encoding="utf-8")
 
     def __get_console_info(self):
         csbi = CONSOLE_SCREEN_BUFFER_INFO()
@@ -86,44 +99,55 @@ class Terminal:
             sys.stdout.write(ESCAPE + COLORS_BK[bk])
 
     def set_title(self, title):
-        if self.type in ["xterm", "Eterm", "aterm", "rxvt", "xterm-color"]:
-            sys.stderr.write("\x1b]1;\x07\x1b]2;" + str(title) + "\x07")
-            sys.stderr.flush()
+        sys.stderr.write("\x1b]1;\x07\x1b]2;" + str(title) + "\x07")
+        sys.stderr.flush()
 
     def cprint(self, fg, bk, text):
         self.set_color(fg, bk)
-        print(text, end="")
+        self.print(text)
+
+    def print(self, text):
+        if type(text) is not str:
+            text = str(text)
+        w = DWORD(0)
+        x_utf_8 = text.encode("UTF-8")
+        x_len = len(x_utf_8)
+        WriteConsoleA(self.stdout_handle, c_char_p(x_utf_8), x_len, byref(w), None)
 
     def print_at(self, x, y, text):
         self.gotoXY(x, y)
-        print(text, end="")
+        self.print(text)
+
+    def output_code(self, code):
+        sys.stdout.write(code)
+        sys.stdout.flush()
 
     def clear(self):
-        sys.stdout.write(Terminal.codes["clear"])
+        self.output_code(CODES["clear"])
 
     def gotoXY(self, x, y):
-        sys.stdout.write(Terminal.codes["gotoxy"] % (y, x))
+        self.output_code(CODES["gotoxy"] % (y, x))
 
     def save_pos(self):
-        sys.stdout.write(Terminal.codes["save"])
+        self.output_code(CODES["save"])
 
     def restore_pos(self):
-        sys.stdout.write(Terminal.codes["restore"])
+        self.output_code(CODES["restore"])
 
     def reset(self):
-        sys.stdout.write(Terminal.codes["reset"])
+        self.output_code(CODES["reset"])
 
     def move_left(self, c=1):
-        sys.stdout.write(Terminal.codes["move_left"] % c)
+        self.output_code(CODES["move_left"] % c)
 
     def move_right(self, c=1):
-        sys.stdout.write(Terminal.codes["move_right"] % c)
+        self.output_code(CODES["move_right"] % c)
 
     def move_up(self, c=1):
-        sys.stdout.write(CODES["move_up"] % c)
+        self.output_code(CODES["move_up"] % c)
 
     def move_down(self, c=1):
-        sys.stdout.write(CODES["move_down"] % c)
+        self.output_code(CODES["move_down"] % c)
 
     def columns(self):
         csbi = self.__get_console_info()
@@ -134,16 +158,37 @@ class Terminal:
         return csbi.dwSize.Y
 
     def underline(self):
-        sys.stdout.write(CODES["underline"])
+        self.output_code(CODES["underline"])
+
+    def underline_off(self):
+        self.output_code(CODES["underline_off"])
 
     def blink(self):
-        sys.stdout.write(CODES["blink"])
+        self.output_code(CODES["blink"])
+
+    def blink_off(self):
+        self.output_code(CODES["blink_off"])
 
     def reverse(self):
-        sys.stdout.write(CODES["reverse"])
+        self.output_code(CODES["reverse"])
+
+    def reverse_off(self):
+        self.output_code(CODES["reverse_off"])
+
+    def italic(self):
+        self.output_code(CODES["italic"])
+
+    def italic_off(self):
+        self.output_code(CODES["italic_off"])
+
+    def crossed(self):
+        self.output_code(CODES["crossed"])
+
+    def crossed_off(self):
+        self.output_code(CODES["crossed_off"])
 
     def invisible(self):
-        sys.stdout.write(CODES["invisible"])
+        self.output_code(CODES["invisible"])
 
     def reset_colors(self):
         self.default_background()
@@ -151,19 +196,31 @@ class Terminal:
         self.reset()
 
     def xterm256_set_fg_color(self, color):
-        sys.stdout.write(ESCAPE + "38;5;%dm" % color)
+        self.output_code(ESCAPE + "38;5;%dm" % color)
 
     def xterm24bit_set_fg_color(self, r, g, b):
-        sys.stdout.write(ESCAPE + "38;2;%d;%d;%dm" % (r, g, b))
+        self.output_code(ESCAPE + "38;2;%d;%d;%dm" % (r, g, b))
 
     def xterm256_set_bk_color(self, color):
-        sys.stdout.write(ESCAPE + "48;5;%dm" % color)
+        self.output_code(ESCAPE + "48;5;%dm" % color)
 
     def xterm24bit_set_bk_color(self, r, g, b):
-        sys.stdout.write(ESCAPE + "48;2;%d;%d;%dm" % (r, g, b))
+        self.output_code(ESCAPE + "48;2;%d;%d;%dm" % (r, g, b))
 
     def default_foreground(self):
-        sys.stdout.write(ESCAPE + "39m")
+        self.output_code(ESCAPE + "39m")
 
     def default_background(self):
-        sys.stdout.write(ESCAPE + "49m")
+        self.output_code(ESCAPE + "49m")
+
+    def hide_cursor(self):
+        self.output_code(ESCAPE + "?25l")
+
+    def show_cursor(self):
+        self.output_code(ESCAPE + "?2h")
+
+    def enable_window_events(self):
+        pass
+
+    def disable_windows_events(self):
+        pass

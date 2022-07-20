@@ -67,6 +67,10 @@ def make_winconsole():
     return colorconsole.win.Terminal()
 
 
+def is_conemu():
+    return False if os.getenv("ConEmuPid") is None else True
+
+
 def get_terminal(conEmu=False):
     if os.name == "posix":
         return make_ansi()

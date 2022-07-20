@@ -29,6 +29,9 @@
 import os
 import sys
 import termios
+import struct
+import fcntl
+import signal
 from select import select
 from .ansi_codes import ESCAPE, CODES, COLORS_FG, COLORS_BK
 
@@ -43,10 +46,19 @@ class Terminal:
         self.new_term = termios.tcgetattr(self.fd)
         self.old_term = termios.tcgetattr(self.fd)
         self.new_term[3] = self.new_term[3] & ~termios.ICANON & ~termios.ECHO
-        self.ncolumns = 80
-        self.nlines = 24
         self.type = os.environ.get("TERM", "UNKNOWN-ANSI")
         self.new_windows_terminal = False
+        self.get_terminal_size()
+        self.on_resize = None
+        self.install_resize_trigger()
+
+    def resize_handler(self, signum, frame):
+        self.get_terminal_size()
+        if self.on_resize:
+            self.on_resize(self.ncolumns, self.nlines)
+
+    def install_resize_trigger(self):
+        signal.signal(signal.SIGWINCH, self.resize_handler)
 
     def restore_buffered_mode(self):
         termios.tcsetattr(self.fd, termios.TCSAFLUSH, self.old_term)
@@ -79,86 +91,106 @@ class Terminal:
             sys.stdout.write(ESCAPE + COLORS_BK[bk])
 
     def set_title(self, title):
-        if self.type in ["xterm", "Eterm", "aterm", "rxvt", "xterm-color"]:
-            sys.stderr.write("\x1b]1;\x07\x1b]2;" + str(title) + "\x07")
-            sys.stderr.flush()
+        if self.type in [
+            "xterm",
+            "Eterm",
+            "aterm",
+            "rxvt",
+            "xterm-color",
+            "xterm-256color",
+        ]:
+            self.output_code("\x1b]1;\x07\x1b]2;" + str(title) + "\x07")
 
     def cprint(self, fg, bk, text):
         self.set_color(fg, bk)
-        print(text, end="")
+        self.print(text)
 
     def print_at(self, x, y, text):
         self.gotoXY(x, y)
-        print(text, end="")
+        self.print(text)
 
     def print(self, text):
         print(text, end="")
+        sys.stdout.flush()
+
+    def output_code(self, code):
+        sys.stdout.write(code)
+        sys.stdout.flush()
 
     def clear(self):
-        sys.stdout.write(CODES["clear"])
+        self.output_code(CODES["clear"])
 
     def gotoXY(self, x, y):
-        sys.stdout.write(CODES["gotoxy"] % (y, x))
+        x += 1
+        y += 1
+        self.output_code(CODES["gotoxy"] % (y, x))
 
     def save_pos(self):
-        sys.stdout.write(CODES["save"])
+        self.output_code(CODES["save"])
 
     def restore_pos(self):
-        sys.stdout.write(CODES["restore"])
+        self.output_code(CODES["restore"])
 
     def reset(self):
-        sys.stdout.write(CODES["reset"])
+        self.output_code(CODES["reset"])
 
     def move_left(self, c=1):
-        sys.stdout.write(CODES["move_left"] % c)
+        self.output_code(CODES["move_left"] % c)
 
     def move_right(self, c=1):
-        sys.stdout.write(CODES["move_right"] % c)
+        self.output_code(CODES["move_right"] % c)
 
     def move_up(self, c=1):
-        sys.stdout.write(CODES["move_up"] % c)
+        self.output_code(CODES["move_up"] % c)
 
     def move_down(self, c=1):
-        sys.stdout.write(CODES["move_down"] % c)
+        self.output_code(CODES["move_down"] % c)
+
+    def get_terminal_size(self):
+        s = struct.pack("HHHH", 0, 0, 0, 0)
+        t = fcntl.ioctl(sys.stdout.fileno(), termios.TIOCGWINSZ, s)
+        self.nlines, self.ncolumns = struct.unpack("HHHH", t)[0:2]
 
     def columns(self):
-        return int(os.getenv("COLUMNS", self.ncolumns))
+        self.get_terminal_size()
+        return self.ncolumns
 
     def lines(self):
-        return int(os.getenv("LINES", self.nlines))
+        self.get_terminal_size()
+        return self.nlines
 
     def underline(self):
-        sys.stdout.write(CODES["underline"])
+        self.output_code(CODES["underline"])
 
     def underline_off(self):
-        sys.stdout.write(CODES["underline_off"])
+        self.output_code(CODES["underline_off"])
 
     def blink(self):
-        sys.stdout.write(CODES["blink"])
+        self.output_code(CODES["blink"])
 
     def blink_off(self):
-        sys.stdout.write(CODES["blink_off"])
+        self.output_code(CODES["blink_off"])
 
     def reverse(self):
-        sys.stdout.write(CODES["reverse"])
+        self.output_code(CODES["reverse"])
 
     def reverse_off(self):
-        sys.stdout.write(CODES["reverse_off"])
+        self.output_code(CODES["reverse_off"])
 
     def italic(self):
-        sys.stdout.write(CODES["italic"])
+        self.output_code(CODES["italic"])
 
     def italic_off(self):
-        sys.stdout.write(CODES["italic_off"])
+        self.output_code(CODES["italic_off"])
 
     def crossed(self):
-        sys.stdout.write(CODES["crossed"])
+        self.output_code(CODES["crossed"])
 
     def crossed_off(self):
-        sys.stdout.write(CODES["crossed_off"])
+        self.output_code(CODES["crossed_off"])
 
     def invisible(self):
-        sys.stdout.write(CODES["invisible"])
+        self.output_code(CODES["invisible"])
 
     def reset_colors(self):
         self.default_background()
@@ -166,19 +198,31 @@ class Terminal:
         self.reset()
 
     def xterm256_set_fg_color(self, color):
-        sys.stdout.write(ESCAPE + "38;5;%dm" % color)
+        self.output_code(ESCAPE + "38;5;%dm" % color)
 
     def xterm24bit_set_fg_color(self, r, g, b):
-        sys.stdout.write(ESCAPE + "38;2;%d;%d;%dm" % (r, g, b))
+        self.output_code(ESCAPE + "38;2;%d;%d;%dm" % (r, g, b))
 
     def xterm256_set_bk_color(self, color):
-        sys.stdout.write(ESCAPE + "48;5;%dm" % color)
+        self.output_code(ESCAPE + "48;5;%dm" % color)
 
     def xterm24bit_set_bk_color(self, r, g, b):
-        sys.stdout.write(ESCAPE + "48;2;%d;%d;%dm" % (r, g, b))
+        self.output_code(ESCAPE + "48;2;%d;%d;%dm" % (r, g, b))
 
     def default_foreground(self):
-        sys.stdout.write(ESCAPE + "39m")
+        self.output_code(ESCAPE + "39m")
 
     def default_background(self):
-        sys.stdout.write(ESCAPE + "49m")
+        self.output_code(ESCAPE + "49m")
+
+    def hide_cursor(self):
+        self.output_code(ESCAPE + "?25l")
+
+    def show_cursor(self):
+        sys.stdout.write(ESCAPE + "?2h")
+
+    def enable_window_events(self):
+        pass
+
+    def disable_windows_events(self):
+        pass
