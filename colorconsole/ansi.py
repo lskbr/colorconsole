@@ -42,20 +42,21 @@ class Terminal:
         self.fg = None
         self.bk = None
         self.havecolor = 1
-        self.dotitles = 1
-        self.fd = sys.stdin.fileno()
-        self.new_term = termios.tcgetattr(self.fd)
-        self.old_term = termios.tcgetattr(self.fd)
-        self.new_term[3] = self.new_term[3] & ~termios.ICANON & ~termios.ECHO
+        self._fd = sys.stdin.fileno()
+        self._new_term = termios.tcgetattr(self._fd)
+        self._old_term = termios.tcgetattr(self._fd)
+        self._new_term[3] = self._new_term[3] & ~termios.ICANON & ~termios.ECHO
         self.type = os.environ.get("TERM", "UNKNOWN-ANSI")
         self.new_windows_terminal = False
+        self.ansi_commands = self.ansi_256colors = self.ansi_24bit_colors = True
+        self.conemu = False
         self.nlines = 0
         self.ncolumns = 0
         self.__get_terminal_size()
         self.on_resize = None
-        self.install_resize_trigger()
+        self.__install_resize_trigger()
 
-    def resize_handler(self, signum, frame) -> None:
+    def __resize_handler(self, signum, frame) -> None:
         """Receive a SIGWINCH signal on Linux/Mac OS X to indicate the screen size changed.
         Updates local state about screen dimensions.
         Calls self.on_resize if one was set up."""
@@ -63,19 +64,19 @@ class Terminal:
         if self.on_resize:
             self.on_resize(self.ncolumns, self.nlines)
 
-    def install_resize_trigger(self) -> None:
+    def __install_resize_trigger(self) -> None:
         if sys.platform != "win32":
-            signal.signal(signal.SIGWINCH, self.resize_handler)
+            signal.signal(signal.SIGWINCH, self.__resize_handler)
 
     def restore_buffered_mode(self) -> None:
         """Restore buffered mode (line oriented)."""
         if sys.platform != "win32":
-            termios.tcsetattr(self.fd, termios.TCSAFLUSH, self.old_term)
+            termios.tcsetattr(self._fd, termios.TCSAFLUSH, self._old_term)
 
     def enable_unbuffered_input_mode(self) -> None:
         """Enable unbuffered mode (character oriented)."""
         if sys.platform != "win32":
-            termios.tcsetattr(self.fd, termios.TCSAFLUSH, self.new_term)
+            termios.tcsetattr(self._fd, termios.TCSAFLUSH, self._new_term)
 
     def putch(self, ch: str) -> None:
         """Print a single character to stdout"""
@@ -200,15 +201,15 @@ class Terminal:
         return self.nlines
 
     def underline(self) -> None:
-        """ "Turn font underline on."""
+        """Turn font underline on."""
         self.output_code(CODES["underline"])
 
     def underline_off(self) -> None:
-        """ "Turn font underline off."""
+        """Turn font underline off."""
         self.output_code(CODES["underline_off"])
 
     def blink(self) -> None:
-        """ "Make foreground and background color to blink."""
+        """Make foreground and background color to blink."""
         self.output_code(CODES["blink"])
 
     def blink_off(self) -> None:
@@ -251,20 +252,20 @@ class Terminal:
         self.reset()
 
     def xterm256_set_fg_color(self, color: int):
-        """ "Set the foreground color using a 256 colors pallete"""
+        """Set the foreground color using a 256 colors pallete"""
         self.output_code(ESCAPE + "38;5;%dm" % color)
 
     def xterm24bit_set_fg_color(self, r: int, g: int, b: int):
-        """ "Set the foreground color using the red (r), green (g) and blue (b) values passed to it.
+        """Set the foreground color using the red (r), green (g) and blue (b) values passed to it.
         r, g and b must be between 0 and 255."""
         self.output_code(ESCAPE + "38;2;%d;%d;%dm" % (r, g, b))
 
     def xterm256_set_bk_color(self, color: int):
-        """ "Set the background color using a 256 colors pallete"""
+        """Set the background color using a 256 colors pallete"""
         self.output_code(ESCAPE + "48;5;%dm" % color)
 
     def xterm24bit_set_bk_color(self, r: int, g: int, b: int) -> None:
-        """ "Set the background color using the red (r), green (g) and blue (b) values passed to it.
+        """Set the background color using the red (r), green (g) and blue (b) values passed to it.
         r, g and b must be between 0 and 255."""
         self.output_code(ESCAPE + "48;2;%d;%d;%dm" % (r, g, b))
 

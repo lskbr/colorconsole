@@ -26,7 +26,7 @@
 
 import os
 import sys
-from typing import Protocol
+from typing import Protocol, Callable, Optional
 
 colors = {
     "BLACK": 0,
@@ -51,6 +51,10 @@ color_numbers_to_names = {v: k for k, v in colors.items()}
 
 
 class TerminalProtocol(Protocol):
+
+    on_resize: Optional[Callable[[int, int], None]]
+    havecolor: bool
+
     def enable_virtual_terminal_processing(self):
         ...
 
@@ -196,12 +200,6 @@ def make_ansi() -> TerminalProtocol:
     return colorconsole.ansi.Terminal()
 
 
-def make_conemu() -> TerminalProtocol:
-    import colorconsole.conemu
-
-    return colorconsole.conemu.Terminal()
-
-
 def make_winconsole() -> TerminalProtocol:
     import colorconsole.win
 
@@ -216,9 +214,6 @@ def get_terminal(conEmu=False) -> TerminalProtocol:
     if os.name == "posix":
         return make_ansi()
     elif os.name == "nt":
-        if conEmu:
-            return make_conemu()
-        else:
-            return make_winconsole()
+        return make_winconsole()
     else:
         raise RuntimeError("Unknown or unsupported terminal")

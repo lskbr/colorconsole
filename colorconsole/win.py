@@ -122,22 +122,23 @@ class Terminal:
         self.fg = None
         self.bk = None
         self.havecolor = 1
-        self.dotitles = 1
-        self.stdout_handle = GetStdHandle(Terminal.STD_OUTPUT_HANDLE)
-        self.stdin_handle = GetStdHandle(Terminal.STD_INPUT_HANDLE)
+        self._stdout_handle = GetStdHandle(Terminal.STD_OUTPUT_HANDLE)
+        self._stdin_handle = GetStdHandle(Terminal.STD_INPUT_HANDLE)
         self.reset_attrib = self.__get_text_attr()
-        self.savedX = 0
-        self.savedY = 0
+        self._savedX = 0
+        self._savedY = 0
         self.__detect_terminal_type()
         SetConsoleCP(CP_UTF8)
         SetConsoleOutputCP(CP_UTF8)
-        self.event_reader = None
+        self.__event_reader = None
         self.on_resize = None
         sys.stdout.reconfigure(encoding="utf-8")
         if self.new_windows_terminal:
             self.enable_virtual_terminal_processing()
 
     def __detect_terminal_type(self):
+        """Check for env variables to detect:
+        the old windows console, new windows terminal or conemu."""
         self.conemu = os.getenv("ConEmuPid") is not None
         self.type = "WIN" if not self.conemu else "CONEMU"
         self.new_windows_terminal = os.getenv("WT_SESSION") is not None or False
@@ -148,51 +149,61 @@ class Terminal:
     def enable_window_events(self):
         if self.new_windows_terminal:
             z = DWORD()
-            GetConsoleMode(self.stdin_handle, byref(z))
+            GetConsoleMode(self._stdin_handle, byref(z))
             z = DWORD(z.value | ENABLE_WINDOW_INPUT)
-            SetConsoleMode(self.stdin_handle, z)
-            self.event_reader = EventReader(self.stdin_handle, self)
-            self.event_reader.start()
+            SetConsoleMode(self._stdin_handle, z)
+            self.__event_reader = EventReader(self._stdin_handle, self)
+            self.__event_reader.start()
 
     def enable_virtual_terminal_processing(self):
         if self.new_windows_terminal:
             z = DWORD()
-            GetConsoleMode(self.stdout_handle, byref(z))
+            GetConsoleMode(self._stdout_handle, byref(z))
             z = DWORD(z.value | ENABLE_VIRTUAL_TERMINAL_PROCESSING)
-            SetConsoleMode(self.stdout_handle, z)
+            SetConsoleMode(self._stdout_handle, z)
 
     def disable_windows_events(self):
-        if self.event_reader:
-            self.event_reader.stop()
-            self.event_reader = None
+        if self.__event_reader:
+            self.__event_reader.stop()
+            self.__event_reader = None
 
     def restore_buffered_mode(self):
+        """Restore buffered mode (line oriented)."""
         pass
 
     def enable_unbuffered_input_mode(self):
+        """Enable unbuffered mode (character oriented)."""
         pass
 
     def putch(self, ch):
+        """Print a single character to stdout"""
         msvcrt.putc(ch)
 
-    def getch(self):
-        return msvcrt.getch()
+    def getch(self) -> str:
+        """Read next key"""
+        return msvcrt.getch().decode("utf-8")
 
-    def getche(self):
-        return msvcrt.getche()
+    def getche(self) -> str:
+        """Read next key and print it on screen (echo)"""
+        return msvcrt.getche().decode("utf-8")
 
     def kbhit(self, timeout: float = 0) -> bool:
+        """Pauses the program until timeout (in seconds) or a key is available in stdin.
+        Returns True if a key is available, False if the timeout was reached with no input"""
         # Convert timeout to milisseconds
         mtimeout = int(timeout * 1000)
-        wr = WaitForSingleObject(self.stdin_handle, mtimeout)
+        wr = WaitForSingleObject(self._stdin_handle, mtimeout)
         return wr == WAIT_OBJECT_0
         # return msvcrt.kbhit()
 
-    def no_colors(self):
+    def no_colors(self) -> None:
+        """Turn off color display. All further color changing methods will produce no effect."""
         self.havecolor = 0
 
-    def set_color(self, fg=None, bk=None):
-        if self.terminal == "WIN":
+    def set_color(self, fg: int = None, bk: int = None) -> None:
+        """Sets the foregound and background colors. This method only supports 16 color consoles.
+        fg and bg must be between 0 and 15."""
+        if self.type == "WIN":
             actual = self.__get_text_attr()
             if fg is None:
                 fg = actual & 0x000F
@@ -209,7 +220,7 @@ class Terminal:
 
     def __get_console_info(self):
         csbi = CONSOLE_SCREEN_BUFFER_INFO()
-        GetConsoleScreenBufferInfo(self.stdout_handle, byref(csbi))
+        GetConsoleScreenBufferInfo(self._stdout_handle, byref(csbi))
         return csbi
 
     def __get_text_attr(self):
@@ -217,59 +228,68 @@ class Terminal:
 
     def __set_text_attr(self, color):
         sys.stdout.flush()
-        SetConsoleTextAttribute(self.stdout_handle, color)
+        SetConsoleTextAttribute(self._stdout_handle, color)
 
-    def set_title(self, title):
+    def set_title(self, title: str) -> None:
+        """Change the title of the terminal windows to title."""
         ctitle = c_wchar_p(title)
         SetConsoleTitle(ctitle)
 
-    def cprint(self, fg, bk, text):
+    def cprint(self, fg: int, bk: int, text: str) -> None:
+        """Combine color change and print in a single method call."""
         self.set_color(fg, bk)
-        self.win_print(text)
+        self.__win_print(text)
 
-    def print_at(self, x, y, text):
+    def print_at(self, x: int, y: int, text: str) -> None:
+        """Print the text at the specified column (x) and line (y)."""
         self.gotoXY(x, y)
-        self.win_print(text)
+        self.__win_print(text)
 
-    def print(self, text):
-        self.win_print(text)
+    def print(self, text: str) -> None:
+        """Print the text on screen."""
+        self.__win_print(text)
 
-    def clear(self):  # From kb q99261
+    def clear(self) -> None:  # From kb q99261
+        """Clear the screen."""
         if self.ansi_commands:
             self.output_code(CODES["clear"])
         else:
             rp = COORD()
             wr = DWORD()
             csbi = CONSOLE_SCREEN_BUFFER_INFO()
-            GetConsoleScreenBufferInfo(self.stdout_handle, byref(csbi))
+            GetConsoleScreenBufferInfo(self._stdout_handle, byref(csbi))
             sx = csbi.dwSize.X * csbi.dwSize.Y
 
-            FillConsoleOutputCharacter(self.stdout_handle, 32, sx, rp, byref(wr))
+            FillConsoleOutputCharacter(self._stdout_handle, 32, sx, rp, byref(wr))
             FillConsoleOutputAttribute(
-                self.stdout_handle, csbi.wAttributes, sx, rp, byref(wr)
+                self._stdout_handle, csbi.wAttributes, sx, rp, byref(wr)
             )
 
-    def gotoXY(self, x, y):
+    def gotoXY(self, x: int, y: int) -> None:
+        """Move the cursor to column (x), line (y)."""
         p = COORD()
         p.X = int(x)
         p.Y = int(y)
-        SetConsoleCursorPosition(self.stdout_handle, p)
+        SetConsoleCursorPosition(self._stdout_handle, p)
 
-    def save_pos(self):
+    def save_pos(self) -> None:
+        """Save the current cursor position."""
         if self.ansi_commands:
             self.output_code(CODES["save"])
         else:
             csbi = self.__get_console_info()
-            self.savedX = csbi.dwCursorPosition.X
-            self.savedY = csbi.dwCursorPosition.Y
+            self._savedX = csbi.dwCursorPosition.X
+            self._savedY = csbi.dwCursorPosition.Y
 
-    def restore_pos(self):
+    def restore_pos(self) -> None:
+        """Restore the cursor position to the previously saved one."""
         if self.ansi_commands:
             self.output_code(CODES["restore"])
         else:
-            self.gotoXY(self.savedX, self.savedY)
+            self.gotoXY(self._savedX, self._savedY)
 
-    def reset(self):
+    def reset(self) -> None:
+        """Reset terminal colors and settings to the default ones."""
         if self.ansi_commands:
             self.output_code(CODES["reset"])
         else:
@@ -281,121 +301,151 @@ class Terminal:
         ay = csbi.dwCursorPosition.Y
         self.gotoXY(ax + dx, ay + dy)
 
-    def move_left(self, c=1):
+    def move_left(self, c: int = 1) -> None:
+        """Move the cursor to the left (c or 1) columns"""
         self.__move_from(-c, 0)
 
-    def move_right(self, c=1):
+    def move_right(self, c: int = 1):
+        """Move the cursor to the right (c or 1) columns"""
         self.__move_from(c, 0)
 
-    def move_up(self, c=1):
+    def move_up(self, c: int = 1):
+        """Move the cursor one line up (c or 1) lines"""
         self.__move_from(0, -c)
 
-    def move_down(self, c=1):
+    def move_down(self, c: int = 1):
+        """Move the cursor one line down (c or 1) lines"""
         self.__move_from(0, c)
 
-    def set_console_size(self, columns, lines):
+    def set_console_size(self, columns: int, lines: int):
         coord = COORD()
         coord.X = columns
         coord.Y = lines
-        SetConsoleScreenBufferSize(self.stdout_handle, byref(coord))
+        SetConsoleScreenBufferSize(self._stdout_handle, byref(coord))
 
-    def columns(self):
+    def columns(self) -> int:
+        """Get the number of columns available on screen."""
         csbi = self.__get_console_info()
         return csbi.dwSize.X
 
-    def lines(self):
+    def lines(self) -> int:
+        """Get the number of lines available on screen."""
         csbi = self.__get_console_info()
         return csbi.dwSize.Y
 
     def output_code(self, code):
+        """Output a code sequence to the stdout, flushing it just after."""
         if self.ansi_commands:
             sys.stdout.write(code)
             sys.stdout.flush()
 
-    def underline(self):
+    def underline(self) -> None:
+        """Turn font underline on."""
         self.output_code(CODES["underline"])
 
-    def underline_off(self):
+    def underline_off(self) -> None:
+        """Turn font underline off."""
         self.output_code(CODES["underline_off"])
 
-    def blink(self):
+    def blink(self) -> None:
+        """Make foreground and background color to blink."""
         self.output_code(CODES["blink"])
 
     def blink_off(self):
+        """Turn blink off."""
         self.output_code(CODES["blink_off"])
 
-    def reverse(self):
+    def reverse(self) -> None:
+        """Swap background and foreground colors"""
         self.output_code(CODES["reverse"])
 
-    def reverse_off(self):
+    def reverse_off(self) -> None:
+        """Turn reverse mode off"""
         self.output_code(CODES["reverse_off"])
 
-    def italic(self):
+    def italic(self) -> None:
+        """Turn font italic on"""
         self.output_code(CODES["italic"])
 
-    def italic_off(self):
+    def italic_off(self) -> None:
+        """Turn font italic off"""
         self.output_code(CODES["italic_off"])
 
-    def crossed(self):
+    def crossed(self) -> None:
+        """Turn crossed text on"""
         self.output_code(CODES["crossed"])
 
-    def crossed_off(self):
+    def crossed_off(self) -> None:
+        """Turn crossed text off"""
         self.output_code(CODES["crossed_off"])
 
-    def invisible(self):
+    def invisible(self) -> None:
+        """Make text invisible"""
         self.output_code(CODES["invisible"])
 
-    def reset_colors(self):
+    def reset_colors(self) -> None:
+        """Reset the background and foreground color to the default ones.
+        Reset terminal attributes to normal."""
         self.reset()
 
-    def win_print(self, x):
+    def __win_print(self, x):
         # https://github.com/microsoft/terminal/issues/10055
         if type(x) is not str:
             x = str(x)
         w = DWORD(0)
         x_utf_8 = x.encode("UTF-8")
         x_len = len(x_utf_8)
-        WriteConsoleA(self.stdout_handle, c_char_p(x_utf_8), x_len, byref(w), None)
+        WriteConsoleA(self._stdout_handle, c_char_p(x_utf_8), x_len, byref(w), None)
 
-    def xterm256_set_fg_color(self, color):
+    def xterm256_set_fg_color(self, color: int):
+        """Set the foreground color using a 256 colors pallete"""
         if self.ansi_256colors:
             rgb = WT_COLORS_256[color]
             sys.stdout.write(ESCAPE + f"38;2;{rgb}m")
             sys.stdout.flush()
 
-    def xterm256_set_bk_color(self, color):
+    def xterm256_set_bk_color(self, color: int):
+        """Set the background color using a 256 colors pallete"""
         if self.ansi_256colors:
             rgb = WT_COLORS_256[color]
             self.output_code(ESCAPE + f"48;2;{rgb}m")
 
-    def xterm24bit_set_fg_color(self, r, g, b):
+    def xterm24bit_set_fg_color(self, r: int, g: int, b: int):
+        """Set the foreground color using the red (r), green (g) and blue (b) values passed to it.
+        r, g and b must be between 0 and 255."""
         if self.ansi_24bit_colors:
             self.output_code(ESCAPE + "38;2;%d;%d;%dm" % (r, g, b))
 
-    def xterm24bit_set_bk_color(self, r, g, b):
+    def xterm24bit_set_bk_color(self, r: int, g: int, b: int) -> None:
+        """Set the background color using the red (r), green (g) and blue (b) values passed to it.
+        r, g and b must be between 0 and 255."""
         if self.ansi_24bit_colors:
             self.output_code(ESCAPE + "48;2;%d;%d;%dm" % (r, g, b))
 
-    def default_foreground(self):
+    def default_foreground(self) -> None:
+        """Reset the foreground color to the terminal's default one."""
         self.output_code(ESCAPE + "39m")
 
-    def default_background(self):
+    def default_background(self) -> None:
+        """Reset the background color to the terminal's default one."""
         self.output_code(ESCAPE + "49m")
 
-    def hide_cursor(self):
+    def hide_cursor(self) -> None:
+        """Hides the cursor on screen"""
         if self.ansi_commands:
             self.output_code(ESCAPE + "?25l")
         else:
             cinfo = CONSOLE_CURSOR_INFO()
-            GetConsoleCursorInfo(self.stdout_handle, byref(cinfo))
+            GetConsoleCursorInfo(self._stdout_handle, byref(cinfo))
             cinfo.bVisible = False
-            SetConsoleCursorInfo(self.stdout_handle, byref(cinfo))
+            SetConsoleCursorInfo(self._stdout_handle, byref(cinfo))
 
-    def show_cursor(self):
+    def show_cursor(self) -> None:
+        """Make the cursor visible on screen"""
         if self.ansi_commands:
             self.output_code(ESCAPE + "?2h")
         else:
             cinfo = CONSOLE_CURSOR_INFO()
-            GetConsoleCursorInfo(self.stdout_handle, byref(cinfo))
+            GetConsoleCursorInfo(self._stdout_handle, byref(cinfo))
             cinfo.bVisible = True
-            SetConsoleCursorInfo(self.stdout_handle, byref(cinfo))
+            SetConsoleCursorInfo(self._stdout_handle, byref(cinfo))
