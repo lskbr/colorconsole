@@ -99,8 +99,7 @@ class Terminal:
             sys.stdout.write(ESCAPE + COLORS_BK[bk])
 
     def set_title(self, title):
-        sys.stderr.write("\x1b]1;\x07\x1b]2;" + str(title) + "\x07")
-        sys.stderr.flush()
+        self.output_code("\x1b]1;\x07\x1b]2;" + str(title) + "\x07")
 
     def cprint(self, fg, bk, text):
         self.set_color(fg, bk)
@@ -223,4 +222,7 @@ class Terminal:
         pass
 
     def disable_windows_events(self):
+        pass
+
+    def enable_virtual_terminal_processing(self):
         pass

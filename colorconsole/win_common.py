@@ -170,6 +170,9 @@ ENABLE_VIRTUAL_TERMINAL_PROCESSING = 0x0004
 ENABLE_WINDOW_INPUT = 0x0008
 CP_UTF8 = 65001
 
+# Wait return values: https://docs.microsoft.com/en-us/windows/win32/api/synchapi/nf-synchapi-waitforsingleobject
+WAIT_OBJECT_0 = 0
+
 # Input events: https://docs.microsoft.com/en-us/windows/console/input-record-str
 KEY_EVENT = 0x0001
 MOUSE_EVENT = 0x0002

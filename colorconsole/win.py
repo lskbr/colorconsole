@@ -36,7 +36,7 @@ import threading
 
 from ctypes import byref, wintypes
 
-from .ansi_codes import ESCAPE, CODES
+from .ansi_codes import ESCAPE, CODES, COLORS_FG, COLORS_BK
 from .win_common import (
     SetConsoleTextAttribute,
     GetConsoleScreenBufferInfo,
@@ -44,6 +44,7 @@ from .win_common import (
     SetConsoleCursorPosition,
     FillConsoleOutputCharacter,
     FillConsoleOutputAttribute,
+    WaitForSingleObject,
     WriteConsoleA,
     GetStdHandle,
     SetConsoleCP,
@@ -59,6 +60,7 @@ from .win_common import (
     CP_UTF8,
     c_char_p,
     c_wchar_p,
+    WAIT_OBJECT_0,
     GetConsoleMode,
     SetConsoleMode,
     wait_for_handles,
@@ -126,8 +128,7 @@ class Terminal:
         self.reset_attrib = self.__get_text_attr()
         self.savedX = 0
         self.savedY = 0
-        self.type = "WIN"
-        self.new_windows_terminal = os.getenv("WT_SESSION") is not None or False
+        self.__detect_terminal_type()
         SetConsoleCP(CP_UTF8)
         SetConsoleOutputCP(CP_UTF8)
         self.event_reader = None
@@ -135,6 +136,14 @@ class Terminal:
         sys.stdout.reconfigure(encoding="utf-8")
         if self.new_windows_terminal:
             self.enable_virtual_terminal_processing()
+
+    def __detect_terminal_type(self):
+        self.conemu = os.getenv("ConEmuPid") is not None
+        self.type = "WIN" if not self.conemu else "CONEMU"
+        self.new_windows_terminal = os.getenv("WT_SESSION") is not None or False
+        self.ansi_commands = self.new_windows_terminal or self.conemu
+        self.ansi_256colors = self.new_windows_terminal or self.conemu
+        self.ansi_24bit_colors = self.new_windows_terminal or self.conemu
 
     def enable_window_events(self):
         if self.new_windows_terminal:
@@ -146,10 +155,11 @@ class Terminal:
             self.event_reader.start()
 
     def enable_virtual_terminal_processing(self):
-        z = DWORD()
-        GetConsoleMode(self.stdout_handle, byref(z))
-        z = DWORD(z.value | ENABLE_VIRTUAL_TERMINAL_PROCESSING)
-        SetConsoleMode(self.stdout_handle, z)
+        if self.new_windows_terminal:
+            z = DWORD()
+            GetConsoleMode(self.stdout_handle, byref(z))
+            z = DWORD(z.value | ENABLE_VIRTUAL_TERMINAL_PROCESSING)
+            SetConsoleMode(self.stdout_handle, z)
 
     def disable_windows_events(self):
         if self.event_reader:
@@ -171,22 +181,31 @@ class Terminal:
     def getche(self):
         return msvcrt.getche()
 
-    def kbhit(self, timeout=0):  # Ignores timeout...
-        return msvcrt.kbhit()
+    def kbhit(self, timeout: float = 0) -> bool:
+        # Convert timeout to milisseconds
+        mtimeout = int(timeout * 1000)
+        wr = WaitForSingleObject(self.stdin_handle, mtimeout)
+        return wr == WAIT_OBJECT_0
+        # return msvcrt.kbhit()
 
     def no_colors(self):
         self.havecolor = 0
 
     def set_color(self, fg=None, bk=None):
-        actual = self.__get_text_attr()
-        if fg is None:
-            fg = actual & 0x000F
-        if bk is None:
-            bk = actual & 0x00F0
+        if self.terminal == "WIN":
+            actual = self.__get_text_attr()
+            if fg is None:
+                fg = actual & 0x000F
+            if bk is None:
+                bk = actual & 0x00F0
+            else:
+                bk <<= 4
+            self.__set_text_attr(fg + bk)
         else:
-            bk <<= 4
-
-        self.__set_text_attr(fg + bk)
+            if fg is not None:
+                sys.stdout.write(ESCAPE + COLORS_FG[fg])
+            if bk is not None:
+                sys.stdout.write(ESCAPE + COLORS_BK[bk])
 
     def __get_console_info(self):
         csbi = CONSOLE_SCREEN_BUFFER_INFO()
@@ -216,7 +235,7 @@ class Terminal:
         self.win_print(text)
 
     def clear(self):  # From kb q99261
-        if self.new_windows_terminal:
+        if self.ansi_commands:
             self.output_code(CODES["clear"])
         else:
             rp = COORD()
@@ -237,15 +256,24 @@ class Terminal:
         SetConsoleCursorPosition(self.stdout_handle, p)
 
     def save_pos(self):
-        csbi = self.__get_console_info()
-        self.savedX = csbi.dwCursorPosition.X
-        self.savedY = csbi.dwCursorPosition.Y
+        if self.ansi_commands:
+            self.output_code(CODES["save"])
+        else:
+            csbi = self.__get_console_info()
+            self.savedX = csbi.dwCursorPosition.X
+            self.savedY = csbi.dwCursorPosition.Y
 
     def restore_pos(self):
-        self.gotoXY(self.savedX, self.savedY)
+        if self.ansi_commands:
+            self.output_code(CODES["restore"])
+        else:
+            self.gotoXY(self.savedX, self.savedY)
 
     def reset(self):
-        self.__set_text_attr(self.reset_attrib)
+        if self.ansi_commands:
+            self.output_code(CODES["reset"])
+        else:
+            self.__set_text_attr(self.reset_attrib)
 
     def __move_from(self, dx, dy):
         csbi = self.__get_console_info()
@@ -280,7 +308,7 @@ class Terminal:
         return csbi.dwSize.Y
 
     def output_code(self, code):
-        if self.new_windows_terminal:
+        if self.ansi_commands:
             sys.stdout.write(code)
             sys.stdout.flush()
 
@@ -330,20 +358,23 @@ class Terminal:
         WriteConsoleA(self.stdout_handle, c_char_p(x_utf_8), x_len, byref(w), None)
 
     def xterm256_set_fg_color(self, color):
-        if self.new_windows_terminal:
+        if self.ansi_256colors:
             rgb = WT_COLORS_256[color]
             sys.stdout.write(ESCAPE + f"38;2;{rgb}m")
             sys.stdout.flush()
 
     def xterm256_set_bk_color(self, color):
-        rgb = WT_COLORS_256[color]
-        self.output_code(ESCAPE + f"48;2;{rgb}m")
+        if self.ansi_256colors:
+            rgb = WT_COLORS_256[color]
+            self.output_code(ESCAPE + f"48;2;{rgb}m")
 
     def xterm24bit_set_fg_color(self, r, g, b):
-        self.output_code(ESCAPE + "38;2;%d;%d;%dm" % (r, g, b))
+        if self.ansi_24bit_colors:
+            self.output_code(ESCAPE + "38;2;%d;%d;%dm" % (r, g, b))
 
     def xterm24bit_set_bk_color(self, r, g, b):
-        self.output_code(ESCAPE + "48;2;%d;%d;%dm" % (r, g, b))
+        if self.ansi_24bit_colors:
+            self.output_code(ESCAPE + "48;2;%d;%d;%dm" % (r, g, b))
 
     def default_foreground(self):
         self.output_code(ESCAPE + "39m")
@@ -352,13 +383,19 @@ class Terminal:
         self.output_code(ESCAPE + "49m")
 
     def hide_cursor(self):
-        cinfo = CONSOLE_CURSOR_INFO()
-        GetConsoleCursorInfo(self.stdout_handle, byref(cinfo))
-        cinfo.bVisible = False
-        SetConsoleCursorInfo(self.stdout_handle, byref(cinfo))
+        if self.ansi_commands:
+            self.output_code(ESCAPE + "?25l")
+        else:
+            cinfo = CONSOLE_CURSOR_INFO()
+            GetConsoleCursorInfo(self.stdout_handle, byref(cinfo))
+            cinfo.bVisible = False
+            SetConsoleCursorInfo(self.stdout_handle, byref(cinfo))
 
     def show_cursor(self):
-        cinfo = CONSOLE_CURSOR_INFO()
-        GetConsoleCursorInfo(self.stdout_handle, byref(cinfo))
-        cinfo.bVisible = True
-        SetConsoleCursorInfo(self.stdout_handle, byref(cinfo))
+        if self.ansi_commands:
+            self.output_code(ESCAPE + "?2h")
+        else:
+            cinfo = CONSOLE_CURSOR_INFO()
+            GetConsoleCursorInfo(self.stdout_handle, byref(cinfo))
+            cinfo.bVisible = True
+            SetConsoleCursorInfo(self.stdout_handle, byref(cinfo))

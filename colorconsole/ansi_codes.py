@@ -56,38 +56,38 @@ CODES = {
 
 COLORS_FG = {
     0: "0;30m",  # black
-    4: "0;31m",  # red
-    2: "0;32m",  # green
-    6: "0;33m",  # yellow
     1: "0;34m",  # blue
-    5: "0;35m",  # magenta
+    2: "0;32m",  # green
     3: "0;36m",  # cyan
+    4: "0;31m",  # red
+    5: "0;35m",  # magenta
+    6: "0;33m",  # yellow
     7: "0;37m",  # white
     8: "1;30m",  # grey
-    12: "1;31m",  # bright blue
-    10: "1;32m",  # bright green
-    14: "1;33m",  # bright cyan
     9: "1;34m",
-    13: "1;35m",
+    10: "1;32m",  # bright green
     11: "1;36m",
+    12: "1;31m",  # bright blue
+    13: "1;35m",
+    14: "1;33m",  # bright cyan
     15: "1;37m",  # white
 }
 
 COLORS_BK = {
     0: "40m",  # black
-    4: "41m",  # red
-    2: "42m",  # green
-    6: "43m",  # yellow
     1: "44m",  # blue
-    5: "45m",  # magenta
+    2: "42m",  # green
     3: "46m",  # cyan
+    4: "41m",  # red
+    5: "45m",  # magenta
+    6: "43m",  # yellow
     7: "47m",  # white
     8: "100m",
-    12: "101m",
-    10: "102m",
-    14: "103m",
     9: "104m",
-    13: "105m",
+    10: "102m",
     11: "106m",
+    12: "101m",
+    13: "105m",
+    14: "103m",
     15: "107m",
 }

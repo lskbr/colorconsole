@@ -34,6 +34,7 @@ import fcntl
 import signal
 from select import select
 from .ansi_codes import ESCAPE, CODES, COLORS_FG, COLORS_BK
+from typing import Tuple
 
 
 class Terminal:
@@ -48,49 +49,69 @@ class Terminal:
         self.new_term[3] = self.new_term[3] & ~termios.ICANON & ~termios.ECHO
         self.type = os.environ.get("TERM", "UNKNOWN-ANSI")
         self.new_windows_terminal = False
-        self.get_terminal_size()
+        self.nlines = 0
+        self.ncolumns = 0
+        self.__get_terminal_size()
         self.on_resize = None
         self.install_resize_trigger()
 
-    def resize_handler(self, signum, frame):
-        self.get_terminal_size()
+    def resize_handler(self, signum, frame) -> None:
+        """Receive a SIGWINCH signal on Linux/Mac OS X to indicate the screen size changed.
+        Updates local state about screen dimensions.
+        Calls self.on_resize if one was set up."""
+        self.__get_terminal_size()
         if self.on_resize:
             self.on_resize(self.ncolumns, self.nlines)
 
-    def install_resize_trigger(self):
-        signal.signal(signal.SIGWINCH, self.resize_handler)
+    def install_resize_trigger(self) -> None:
+        if sys.platform != "win32":
+            signal.signal(signal.SIGWINCH, self.resize_handler)
 
-    def restore_buffered_mode(self):
-        termios.tcsetattr(self.fd, termios.TCSAFLUSH, self.old_term)
+    def restore_buffered_mode(self) -> None:
+        """Restore buffered mode (line oriented)."""
+        if sys.platform != "win32":
+            termios.tcsetattr(self.fd, termios.TCSAFLUSH, self.old_term)
 
-    def enable_unbuffered_input_mode(self):
-        termios.tcsetattr(self.fd, termios.TCSAFLUSH, self.new_term)
+    def enable_unbuffered_input_mode(self) -> None:
+        """Enable unbuffered mode (character oriented)."""
+        if sys.platform != "win32":
+            termios.tcsetattr(self.fd, termios.TCSAFLUSH, self.new_term)
 
-    def putch(self, ch):
+    def putch(self, ch: str) -> None:
+        """Print a single character to stdout"""
         sys.stdout.write(ch)
 
-    def getch(self):
+    def getch(self) -> str:
+        """Read next key"""
         return sys.stdin.read(1)
 
-    def getche(self):
+    def getche(self) -> str:
+        """Read next key and print it on screen (echo)"""
         ch = self.getch()
         self.putch(ch)
         return ch
 
-    def kbhit(self, timeout=0):
+    def kbhit(self, timeout: float = 0) -> bool:
+        """Pauses the program until timeout (in seconds) or a key is available in stdin.
+        Returns True if a key is available, False if the timeout was reached with no input"""
         dr, dw, de = select([sys.stdin], [], [], timeout)
         return dr != []
 
-    def no_colors(self):
+    def no_colors(self) -> None:
+        """Turn off color display. All further color changing methods will produce no effect."""
         self.havecolor = 0
 
-    def set_color(self, fg=None, bk=None):
+    def set_color(self, fg: int = None, bk: int = None) -> None:
+        """Sets the foregound and background colors. This method only supports 16 color consoles.
+        fg and bg must be between 0 and 15."""
+
         if fg is not None:
             sys.stdout.write(ESCAPE + COLORS_FG[fg])
         if bk is not None:
             sys.stdout.write(ESCAPE + COLORS_BK[bk])
 
-    def set_title(self, title):
+    def set_title(self, title: str) -> None:
+        """Change the title of the terminal windows to title."""
         if self.type in [
             "xterm",
             "Eterm",
@@ -101,128 +122,173 @@ class Terminal:
         ]:
             self.output_code("\x1b]1;\x07\x1b]2;" + str(title) + "\x07")
 
-    def cprint(self, fg, bk, text):
+    def cprint(self, fg: int, bk: int, text: str) -> None:
+        """Combine color change and print in a single method call."""
         self.set_color(fg, bk)
         self.print(text)
 
-    def print_at(self, x, y, text):
+    def print_at(self, x: int, y: int, text: str) -> None:
+        """Print the text at the specified column (x) and line (y)."""
         self.gotoXY(x, y)
         self.print(text)
 
-    def print(self, text):
+    def print(self, text: str) -> None:
+        """Print the text on screen."""
         print(text, end="")
         sys.stdout.flush()
 
-    def output_code(self, code):
+    def output_code(self, code: str) -> None:
+        """Output a code sequence to the stdout, flushing it just after."""
         sys.stdout.write(code)
         sys.stdout.flush()
 
-    def clear(self):
+    def clear(self) -> None:
+        """Clear the screen."""
         self.output_code(CODES["clear"])
 
-    def gotoXY(self, x, y):
+    def gotoXY(self, x: int, y: int) -> None:
+        """Move the cursor to column (x), line (y)."""
         x += 1
         y += 1
         self.output_code(CODES["gotoxy"] % (y, x))
 
-    def save_pos(self):
+    def save_pos(self) -> None:
+        """Save the current cursor position."""
         self.output_code(CODES["save"])
 
-    def restore_pos(self):
+    def restore_pos(self) -> None:
+        """Restore the cursor position to the previously saved one."""
         self.output_code(CODES["restore"])
 
-    def reset(self):
+    def reset(self) -> None:
+        """Reset terminal colors and settings to the default ones."""
         self.output_code(CODES["reset"])
 
-    def move_left(self, c=1):
+    def move_left(self, c: int = 1) -> None:
+        """Move the cursor to the left (c or 1) columns"""
         self.output_code(CODES["move_left"] % c)
 
-    def move_right(self, c=1):
+    def move_right(self, c: int = 1):
+        """Move the cursor to the right (c or 1) columns"""
         self.output_code(CODES["move_right"] % c)
 
-    def move_up(self, c=1):
+    def move_up(self, c: int = 1):
+        """Move the cursor one line up (c or 1) lines"""
         self.output_code(CODES["move_up"] % c)
 
-    def move_down(self, c=1):
+    def move_down(self, c: int = 1):
+        """Move the cursor one line down (c or 1) lines"""
         self.output_code(CODES["move_down"] % c)
 
-    def get_terminal_size(self):
-        s = struct.pack("HHHH", 0, 0, 0, 0)
-        t = fcntl.ioctl(sys.stdout.fileno(), termios.TIOCGWINSZ, s)
-        self.nlines, self.ncolumns = struct.unpack("HHHH", t)[0:2]
+    def __get_terminal_size(self) -> Tuple[int, int]:
+        """Get the current terminal size in lines and columns"""
+        if sys.platform != "win32":
+            s = struct.pack("HHHH", 0, 0, 0, 0)
+            t = fcntl.ioctl(sys.stdout.fileno(), termios.TIOCGWINSZ, s)
+            self.nlines, self.ncolumns = struct.unpack("HHHH", t)[0:2]
+            return self.ncolumns, self.nlines
+        return -1, -1
 
-    def columns(self):
-        self.get_terminal_size()
+    def columns(self) -> int:
+        """Get the number of columns available on screen."""
+        self.__get_terminal_size()
         return self.ncolumns
 
-    def lines(self):
-        self.get_terminal_size()
+    def lines(self) -> int:
+        """Get the number of lines available on screen."""
+        self.__get_terminal_size()
         return self.nlines
 
-    def underline(self):
+    def underline(self) -> None:
+        """ "Turn font underline on."""
         self.output_code(CODES["underline"])
 
-    def underline_off(self):
+    def underline_off(self) -> None:
+        """ "Turn font underline off."""
         self.output_code(CODES["underline_off"])
 
-    def blink(self):
+    def blink(self) -> None:
+        """ "Make foreground and background color to blink."""
         self.output_code(CODES["blink"])
 
-    def blink_off(self):
+    def blink_off(self) -> None:
+        """Turn blink off."""
         self.output_code(CODES["blink_off"])
 
-    def reverse(self):
+    def reverse(self) -> None:
+        """Swap background and foreground colors"""
         self.output_code(CODES["reverse"])
 
-    def reverse_off(self):
+    def reverse_off(self) -> None:
+        """Turn reverse mode off"""
         self.output_code(CODES["reverse_off"])
 
-    def italic(self):
+    def italic(self) -> None:
+        """Turn font italic on"""
         self.output_code(CODES["italic"])
 
-    def italic_off(self):
+    def italic_off(self) -> None:
+        """Turn font italic off"""
         self.output_code(CODES["italic_off"])
 
-    def crossed(self):
+    def crossed(self) -> None:
+        """Turn crossed text on"""
         self.output_code(CODES["crossed"])
 
-    def crossed_off(self):
+    def crossed_off(self) -> None:
+        """Turn crossed text off"""
         self.output_code(CODES["crossed_off"])
 
-    def invisible(self):
+    def invisible(self) -> None:
+        """Make text invisible"""
         self.output_code(CODES["invisible"])
 
-    def reset_colors(self):
+    def reset_colors(self) -> None:
+        """Reset the background and foreground color to the default ones.
+        Reset terminal attributes to normal."""
         self.default_background()
         self.default_foreground
         self.reset()
 
-    def xterm256_set_fg_color(self, color):
+    def xterm256_set_fg_color(self, color: int):
+        """ "Set the foreground color using a 256 colors pallete"""
         self.output_code(ESCAPE + "38;5;%dm" % color)
 
-    def xterm24bit_set_fg_color(self, r, g, b):
+    def xterm24bit_set_fg_color(self, r: int, g: int, b: int):
+        """ "Set the foreground color using the red (r), green (g) and blue (b) values passed to it.
+        r, g and b must be between 0 and 255."""
         self.output_code(ESCAPE + "38;2;%d;%d;%dm" % (r, g, b))
 
-    def xterm256_set_bk_color(self, color):
+    def xterm256_set_bk_color(self, color: int):
+        """ "Set the background color using a 256 colors pallete"""
         self.output_code(ESCAPE + "48;5;%dm" % color)
 
-    def xterm24bit_set_bk_color(self, r, g, b):
+    def xterm24bit_set_bk_color(self, r: int, g: int, b: int) -> None:
+        """ "Set the background color using the red (r), green (g) and blue (b) values passed to it.
+        r, g and b must be between 0 and 255."""
         self.output_code(ESCAPE + "48;2;%d;%d;%dm" % (r, g, b))
 
-    def default_foreground(self):
+    def default_foreground(self) -> None:
+        """Reset the foreground color to the terminal's default one."""
         self.output_code(ESCAPE + "39m")
 
-    def default_background(self):
+    def default_background(self) -> None:
+        """Reset the background color to the terminal's default one."""
         self.output_code(ESCAPE + "49m")
 
-    def hide_cursor(self):
+    def hide_cursor(self) -> None:
+        """Hides the cursor on screen"""
         self.output_code(ESCAPE + "?25l")
 
-    def show_cursor(self):
+    def show_cursor(self) -> None:
+        """Make the cursor visible on screen"""
         sys.stdout.write(ESCAPE + "?2h")
 
-    def enable_window_events(self):
+    def enable_window_events(self) -> None:
         pass
 
-    def disable_windows_events(self):
+    def disable_windows_events(self) -> None:
+        pass
+
+    def enable_virtual_terminal_processing(self):
         pass
